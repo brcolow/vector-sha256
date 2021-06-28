@@ -505,7 +505,14 @@ public class VectorSHA256 {
             write8(out, 20, add(f, IntVector.broadcast(SPECIES_256, INITIAL_HASHES[5])));
             write8(out, 24, add(g, IntVector.broadcast(SPECIES_256, INITIAL_HASHES[6])));
             write8(out, 28, add(h, IntVector.broadcast(SPECIES_256, INITIAL_HASHES[7])));
+            /*
+            <MacGyver> That does look rather odd, yes, but it looks like it's computing 8 hashes vectorized.
+            <MacGyver> The result after those 8 calls to Write8 is 8 hashes back-to-back in out.
+             */
             System.out.println("out final: " + Arrays.toString(out));
+            byte[] lastHash = new byte[32];
+            System.arraycopy(out, 256 - 32, lastHash, 0, 32);
+            System.out.println("out last 32: " + bytesToHex(lastHash));
         }
     }
 
