@@ -23,6 +23,9 @@ import java.util.Arrays;
  *
  * Non double implementation:
  * https://github.com/patrykwnosuch/cpuminer-nosuch/blob/f5d602ea58b12352bdd341df06422c21b4ad7cd2/algo/sha/sha2-hash-4way.c#L440
+ *
+ * Intel paper about multi-buffer SHA2:
+ * https://www.intel.com/content/dam/www/public/us/en/documents/white-papers/communications-ia-multi-buffer-paper.pdf
  */
 public class VectorSHA256 {
     static final VectorSpecies<Integer> SPECIES_256 = IntVector.SPECIES_256;
