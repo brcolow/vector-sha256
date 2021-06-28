@@ -48,6 +48,8 @@ public class VectorSHA256 {
         // sha256Digest.transform_8way("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy".getBytes(StandardCharsets.UTF_8), out);
 
         sha256Digest.update(toHash, 0, toHash.length);
+        sha256Digest.digest(out, 0, 32);
+        System.out.println("out: " + bytesToHex(out));
         //sha256Digest.transform_8way(data, out);
     }
 
@@ -76,7 +78,7 @@ public class VectorSHA256 {
         // offset into buffer
         private int bufOfs;
         // size of the input to the compression function (transform) in bytes
-        private final int blockSize = 256;
+        private final int blockSize = 32 * 8;
         // length of the message digest in bytes
         private final int digestLength = 32;
         long bytesProcessed;
@@ -87,6 +89,7 @@ public class VectorSHA256 {
             padding = new byte[128];
             padding[0] = (byte)0x80;
         }
+
         static final class BE {
             static final VarHandle INT_ARRAY
                     = MethodHandles.byteArrayViewVarHandle(int[].class,
@@ -110,6 +113,7 @@ public class VectorSHA256 {
                 inOfs += 4;
             }
         }
+
         private static final int[] INITIAL_HASHES = {
                 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
                 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
@@ -135,8 +139,14 @@ public class VectorSHA256 {
             int index = (int) bytesProcessed & 0x3f;
             int padLen = (index < 56) ? (56 - index) : (120 - index);
             update(padding, 0, padLen);
-            BE.INT_ARRAY.set((bitsProcessed >>> 32), buffer, 56);
-            BE.INT_ARRAY.set(bitsProcessed, buffer, 60);
+            BE.INT_ARRAY.set(buffer, 56, (int) (bitsProcessed >>> 32));
+            BE.INT_ARRAY.set(buffer, 60, (int) bitsProcessed);
+            byte[] arr = new byte[256];
+            transform_8way(buffer, arr);
+            byte[] hash = new byte[32];
+            // hash[0] =
+            System.out.println("arr: " + bytesToHex(arr));
+            // Now we need to get the 32 byte hash from the state...
             bytesProcessed = -1;
         }
 
@@ -339,11 +349,7 @@ public class VectorSHA256 {
             System.arraycopy(intToBytesLE(v.lane(2)), 0, out, 160 + offset, 4);
             System.arraycopy(intToBytesLE(v.lane(1)), 0, out, 192 + offset, 4);
             System.arraycopy(intToBytesLE(v.lane(0)), 0, out, 224 + offset, 4);
-            System.out.println("v: " + Arrays.toString(v.toArray()));
-            // byte[] arr = new byte[256];
-            // v.intoByteArray(arr, 0, ByteOrder.LITTLE_ENDIAN);
-            // System.out.println("arr: " + Arrays.toString(arr));
-            // System.arraycopy(arr, 0, out, 0, 256);
+            System.out.println("out: " + Arrays.toString(out));
         }
 
         void round(IntVector a, IntVector b, IntVector c, IntVector d, IntVector e, IntVector f, IntVector g, IntVector h, IntVector k) {
@@ -496,7 +502,7 @@ public class VectorSHA256 {
             write8(out, 20, add(f, IntVector.broadcast(SPECIES_256, INITIAL_HASHES[5])));
             write8(out, 24, add(g, IntVector.broadcast(SPECIES_256, INITIAL_HASHES[6])));
             write8(out, 28, add(h, IntVector.broadcast(SPECIES_256, INITIAL_HASHES[7])));
-            System.out.println("out: " + Arrays.toString(out));
+            System.out.println("out final: " + Arrays.toString(out));
         }
     }
 
