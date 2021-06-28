@@ -5,8 +5,12 @@ import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorShuffle;
 import jdk.incubator.vector.VectorSpecies;
 
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 
 /**
@@ -31,13 +35,18 @@ public class VectorSHA256 {
             "mentum leo vel orci. Massa tempor nec feugiat nisl pretium fusce" +
             " id velit. Telus in metus vulputate eu scelerisque felis. Mi tem" +
             "pus imperdiet nulla malesuada pellentesque. Tristique magna sit.").getBytes(StandardCharsets.US_ASCII);
-    public static void main(String[] args) {
+
+    public static void main(String[] args) throws NoSuchAlgorithmException {
+        byte[] toHash = ("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy" +
+                "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy").getBytes(StandardCharsets.US_ASCII);
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] jdkHash = digest.digest(toHash);
+        System.out.println("JDK hash: " + bytesToHex(jdkHash));
         //System.out.println("data.length: " + data.length);
         byte[] out = new byte[32];
         Sha256Digest sha256Digest = new Sha256Digest();
         // sha256Digest.transform_8way("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy".getBytes(StandardCharsets.UTF_8), out);
-        byte[] toHash = ("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy" +
-                "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy").getBytes(StandardCharsets.US_ASCII);
+
         sha256Digest.update(toHash, 0, toHash.length);
         //sha256Digest.transform_8way(data, out);
     }
@@ -54,9 +63,14 @@ public class VectorSHA256 {
     }
 
     public static class Sha256Digest {
+        private IntVector a;
+        private IntVector b;
+        private IntVector c;
         private IntVector d;
+        private IntVector e;
+        private IntVector f;
+        private IntVector g;
         private IntVector h;
-        private int[] state;
         // buffer to store partial blocks, blockSize bytes large
         byte[] buffer;
         // offset into buffer
@@ -66,7 +80,36 @@ public class VectorSHA256 {
         // length of the message digest in bytes
         private final int digestLength = 32;
         long bytesProcessed;
+        static final byte[] padding;
 
+        static {
+            // we need 128 byte padding for SHA-384/512
+            padding = new byte[128];
+            padding[0] = (byte)0x80;
+        }
+        static final class BE {
+            static final VarHandle INT_ARRAY
+                    = MethodHandles.byteArrayViewVarHandle(int[].class,
+                    ByteOrder.BIG_ENDIAN).withInvokeExactBehavior();
+
+        }
+
+        static final class LE {
+            static final VarHandle INT_ARRAY
+                    = MethodHandles.byteArrayViewVarHandle(int[].class,
+                    ByteOrder.LITTLE_ENDIAN).withInvokeExactBehavior();
+        }
+
+        /**
+         * byte[] to int[] conversion, little endian byte order.
+         */
+        static void b2iLittle(byte[] in, int inOfs, int[] out, int outOfs, int len) {
+            len += inOfs;
+            while (inOfs < len) {
+                out[outOfs++] = (int) LE.INT_ARRAY.get(in, inOfs);
+                inOfs += 4;
+            }
+        }
         private static final int[] INITIAL_HASHES = {
                 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
                 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
@@ -74,12 +117,42 @@ public class VectorSHA256 {
 
         public Sha256Digest() {
             buffer = new byte[blockSize];
-            state = new int[8];
+            resetHashes();
+        }
+
+        public void digest(byte[] out, int ofs, int len) {
+            if (len < digestLength) {
+                throw new IllegalArgumentException("Length must be at least "
+                        + digestLength + " for SHA-256 digests");
+            }
+            if (ofs < 0 || ofs > out.length - len) {
+                throw new IllegalArgumentException("Buffer too short to store digest");
+            }
+            if (bytesProcessed < 0) {
+                reset();
+            }
+            long bitsProcessed = bytesProcessed << 3;
+            int index = (int) bytesProcessed & 0x3f;
+            int padLen = (index < 56) ? (56 - index) : (120 - index);
+            update(padding, 0, padLen);
+            BE.INT_ARRAY.set((bitsProcessed >>> 32), buffer, 56);
+            BE.INT_ARRAY.set(bitsProcessed, buffer, 60);
+            bytesProcessed = -1;
+        }
+
+        public void reset() {
             resetHashes();
         }
 
         private void resetHashes() {
-            System.arraycopy(INITIAL_HASHES, 0, state, 0, state.length);
+            a = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[0]);
+            b = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[1]);
+            c = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[2]);
+            d = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[3]);
+            e = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[4]);
+            f = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[5]);
+            g = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[6]);
+            h = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[7]);
         }
 
         public void update(byte in) {
@@ -110,6 +183,7 @@ public class VectorSHA256 {
                 len -= n;
                 if (bufOfs >= blockSize) {
                     // compress completed block now
+                    // JDK does: implCompress(buffer, 0);
                     byte[] out = new byte[256];
                     transform_8way(buffer, out);
                     System.arraycopy(out, 0, buffer, 0, 256);
@@ -133,10 +207,6 @@ public class VectorSHA256 {
                 bufOfs = len;
             }
             System.out.println("buffer: " + bytesToHex(buffer));
-        }
-
-        public void finish() {
-            // TODO
         }
 
         IntVector add(IntVector x, IntVector y) {
@@ -215,11 +285,34 @@ public class VectorSHA256 {
             return xor(or(shR(x, 17), shL(x, 15)), or(shR(x, 19), shL(x, 13)), shR(x, 10));
         }
 
-        IntVector read8(byte[] chunk) {
-            // This may be messing up endianess.
+        int bytesToIntLE(byte[] in, int offset) {
+            System.out.println("offset: " + offset);
+            return ((in[0 + offset] & 0xFF) << 24) |
+                    ((in[1 + offset] & 0xFF) << 16) |
+                    ((in[2 + offset] & 0xFF) << 8) |
+                    (in[3 + offset] & 0xFF);
+        }
+
+        byte[] intToBytesLE(int value) {
+            return new byte[] {
+                    (byte)(value >>> 24),
+                    (byte)(value >>> 16),
+                    (byte)(value >>> 8),
+                    (byte)value};
+        }
+
+        IntVector read8(byte[] chunk, int offset) {
+            System.out.println("read8, offset = " + offset);
             System.out.println("chunk: " + Arrays.toString(chunk));
-            //IntVector ret = IntVector.fromArray(SPECIES_256, chunk, offset);
-            IntVector ret = IntVector.fromArray(SPECIES_256, new int[] {chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0]}, 0);
+            IntVector ret = IntVector.fromArray(SPECIES_256, new int[] {
+                    bytesToIntLE(chunk, 0 + offset),
+                    bytesToIntLE(chunk, 16 + offset),
+                    bytesToIntLE(chunk, 32 + offset),
+                    bytesToIntLE(chunk, 48 + offset),
+                    bytesToIntLE(chunk, 64 + offset),
+                    bytesToIntLE(chunk, 80 + offset),
+                    bytesToIntLE(chunk, 96 + offset),
+                    bytesToIntLE(chunk, 112 + offset)}, 0);
             // var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203, 0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203 }, 0);
             var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{
                     12,13,14,15,   8, 9,10,11,
@@ -238,21 +331,19 @@ public class VectorSHA256 {
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3 }, 0);
             v.rearrange(shuffle, shuffle.laneIsValid());
+            System.arraycopy(intToBytesLE(v.lane(7)), 0, out, 0 + offset, 4);
+            System.arraycopy(intToBytesLE(v.lane(6)), 0, out, 32 + offset, 4);
+            System.arraycopy(intToBytesLE(v.lane(5)), 0, out, 64 + offset, 4);
+            System.arraycopy(intToBytesLE(v.lane(4)), 0, out, 96 + offset, 4);
+            System.arraycopy(intToBytesLE(v.lane(3)), 0, out, 128 + offset, 4);
+            System.arraycopy(intToBytesLE(v.lane(2)), 0, out, 160 + offset, 4);
+            System.arraycopy(intToBytesLE(v.lane(1)), 0, out, 192 + offset, 4);
+            System.arraycopy(intToBytesLE(v.lane(0)), 0, out, 224 + offset, 4);
             System.out.println("v: " + Arrays.toString(v.toArray()));
-            byte[] arr = new byte[256];
-            v.intoByteArray(arr, 0, ByteOrder.LITTLE_ENDIAN);
-            System.out.println("arr: " + Arrays.toString(arr));
-            System.arraycopy(arr, 0, out, 0, 256);
-            /*
-            out[0 + offset] = (char) v.lane(7);
-            out[32 + offset] = (char) v.lane(6);
-            out[64 + offset] = (char) v.lane(5);
-            out[96 + offset] = (char) v.lane(4);
-            out[128 + offset] = (char) v.lane(3);
-            out[160 + offset] = (char) v.lane(2);
-            out[192 + offset] = (char) v.lane(1);
-            out[224 + offset] = (char) v.lane(0);
-             */
+            // byte[] arr = new byte[256];
+            // v.intoByteArray(arr, 0, ByteOrder.LITTLE_ENDIAN);
+            // System.out.println("arr: " + Arrays.toString(arr));
+            // System.arraycopy(arr, 0, out, 0, 256);
         }
 
         void round(IntVector a, IntVector b, IntVector c, IntVector d, IntVector e, IntVector f, IntVector g, IntVector h, IntVector k) {
@@ -280,80 +371,55 @@ public class VectorSHA256 {
         public void transform_8way(byte[] in, byte[] out) {
             System.out.println("transform_8way:\n");
             System.out.println("in: " + bytesToHex(in));
-            IntVector a = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[0]);
-            IntVector b = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[1]);
-            IntVector c = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[2]);
-            d = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[3]);
-            IntVector e = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[4]);
-            IntVector f = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[5]);
-            IntVector g = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[6]);
-            h = IntVector.broadcast(SPECIES_256, INITIAL_HASHES[7]);
 
             IntVector w0, w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13, w14, w15;
 
-            byte[] buffer = new byte[8];
-            System.arraycopy(in, 0, buffer, 0, 8);
-            w0 = read8(buffer);
+            w0 = read8(in, 0);
             round(a, b, c, d, e, f, g, h, add(IntVector.broadcast(SPECIES_256, 0x428a2f98), w0));
 
-            System.arraycopy(in, 8, buffer, 0, 8);
-            w1 = read8(buffer);
+            w1 = read8(in, 4);
             round(h, a, b, c, d, e, f, g, add(IntVector.broadcast(SPECIES_256, 0x71374491), w1));
 
-            System.arraycopy(in, 16, buffer, 0, 8);
-            w2 = read8(buffer);
+            w2 = read8(in, 8);
             round(g, h, a, b, c, d, e, f, add(IntVector.broadcast(SPECIES_256, 0xb5c0fbcf), w2));
 
-            System.arraycopy(in, 24, buffer, 0, 8);
-            w3 = read8(buffer);
+            w3 = read8(in, 12);
             round(f, g, h, a, b, c, d, e, add(IntVector.broadcast(SPECIES_256, 0xe9b5dba5), w3));
 
-            System.arraycopy(in, 32, buffer, 0, 8);
-            w4 = read8(buffer);
+            w4 = read8(in, 16);
             round(e, f, g, h, a, b, c, d, add(IntVector.broadcast(SPECIES_256, 0x3956c25b), w4));
 
-            System.arraycopy(in, 40, buffer, 0, 8);
-            w5 = read8(buffer);
+            w5 = read8(in, 20);
             round(d, e, f, g, h, a, b, c, add(IntVector.broadcast(SPECIES_256, 0x59f111f1), w5));
 
-            System.arraycopy(in, 48, buffer, 0, 8);
-            w6 = read8(buffer);
+            w6 = read8(in, 24);
             round(c, d, e, f, g, h, a, b, add(IntVector.broadcast(SPECIES_256, 0x923f82a4), w6));
 
-            System.arraycopy(in, 56, buffer, 0, 8);
-            w7 = read8(buffer);
+            w7 = read8(in, 28);
             round(b, c, d, e, f, g, h, a, add(IntVector.broadcast(SPECIES_256, 0xab1c5ed5), w7));
 
-            System.arraycopy(in, 64, buffer, 0, 8);
-            w8 = read8(buffer);
+            w8 = read8(in, 32);
             round(a, b, c, d, e, f, g, h, add(IntVector.broadcast(SPECIES_256, 0xd807aa98), w8));
 
-            System.arraycopy(in, 72, buffer, 0, 8);
-            w9 = read8(buffer);
+            w9 = read8(in, 36);
             round(h, a, b, c, d, e, f, g, add(IntVector.broadcast(SPECIES_256, 0x12835b01), w9));
 
-            System.arraycopy(in, 80, buffer, 0, 8);
-            w10 = read8(buffer);
+            w10 = read8(in, 40);
             round(g, h, a, b, c, d, e, f, add(IntVector.broadcast(SPECIES_256, 0x243185be), w10));
 
-            System.arraycopy(in, 88, buffer, 0, 8);
-            w11 = read8(buffer);
+            w11 = read8(in, 44);
             round(f, g, h, a, b, c, d, e, add(IntVector.broadcast(SPECIES_256, 0x550c7dc3), w11));
 
-            System.arraycopy(in, 96, buffer, 0, 8);
-            w12 = read8(buffer);
+            w12 = read8(in, 48);
             round(e, f, g, h, a, b, c, d, add(IntVector.broadcast(SPECIES_256, 0x72be5d74), w12));
 
-            System.arraycopy(in, 104, buffer, 0, 8);
-            w13 = read8(buffer);
+            w13 = read8(in, 52);
             round(d, e, f, g, h, a, b, c, add(IntVector.broadcast(SPECIES_256, 0x80deb1fe), w13));
 
-            System.arraycopy(in, 112, buffer, 0, 8);
-            w14 = read8(buffer);
+            w14 = read8(in, 56);
             round(c, d, e, f, g, h, a, b, add(IntVector.broadcast(SPECIES_256, 0x9bdc06a7), w14));
 
-            System.arraycopy(in, 120, buffer, 0, 8);
-            w15 = read8(buffer);
+            w15 = read8(in, 60);
             round(b, c, d, e, f, g, h, a, add(IntVector.broadcast(SPECIES_256, 0xc19bf174), w15));
 
             round(a, b, c, d, e, f, g, h, add(IntVector.broadcast(SPECIES_256, 0xe49b69c1), inc(w0, sigma1(w14), w9, sigma0(w1))));
