@@ -1,4 +1,4 @@
-package com.brcolow.vector-sha256;
+package com.brcolow.vectorsha256;
 
 import jdk.incubator.vector.IntVector;
 import jdk.incubator.vector.VectorOperators;
@@ -213,6 +213,15 @@ public class VectorSHA256 {
 
         void round(IntVector a, IntVector b, IntVector c, IntVector d, IntVector e, IntVector f, IntVector g, IntVector h, IntVector k) {
             IntVector t1 = add(h, Sigma1(e), ch(e, f, g), k);
+            System.out.print("t1: ");
+            System.out.print(t1.lane(0) + ",");
+            System.out.print(t1.lane(1) + ",");
+            System.out.print(t1.lane(2) + ",");
+            System.out.print(t1.lane(3) + ",");
+            System.out.print(t1.lane(4) + ",");
+            System.out.print(t1.lane(5) + ",");
+            System.out.print(t1.lane(6) + ",");
+            System.out.println(t1.lane(7));
             IntVector t2 = add(Sigma0(a), maj(a, b, c));
             this.d = add(d, t1);
             this.h = add(t1, t2);

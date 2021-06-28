@@ -1,3 +1,3 @@
-module com.brcolow.vector-sha256 {
+module com.brcolow.vectorsha256 {
     requires jdk.incubator.vector;
 }
