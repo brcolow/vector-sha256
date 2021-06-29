@@ -28,20 +28,17 @@ import java.util.Arrays;
  * https://www.intel.com/content/dam/www/public/us/en/documents/white-papers/communications-ia-multi-buffer-paper.pdf
  */
 public class VectorSHA256 {
+    static final VectorSpecies<Integer> SPECIES_64 = IntVector.SPECIES_64;
+    static final VectorSpecies<Integer> SPECIES_128 = IntVector.SPECIES_128;
     static final VectorSpecies<Integer> SPECIES_256 = IntVector.SPECIES_256;
-    static byte[] data = ("-" +
-            "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do " +
-            "eiusmod tempor incididunt ut labore et dolore magna aliqua. Et m" +
-            "olestie ac feugiat sed lectus vestibulum mattis ullamcorper. Mor" +
-            "bi blandit cursus risus at ultrices mi tempus imperdiet nulla. N" +
-            "unc congue nisi vita suscipit tellus mauris. Imperdiet proin fer" +
-            "mentum leo vel orci. Massa tempor nec feugiat nisl pretium fusce" +
-            " id velit. Telus in metus vulputate eu scelerisque felis. Mi tem" +
-            "pus imperdiet nulla malesuada pellentesque. Tristique magna sit.").getBytes(StandardCharsets.US_ASCII);
 
     public static void main(String[] args) throws NoSuchAlgorithmException {
-        byte[] toHash = ("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy" +
-                "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy").getBytes(StandardCharsets.US_ASCII);
+        byte[] toHash = (
+                "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy" +
+                "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy" +
+                "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy" +
+                "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy")
+                .getBytes(StandardCharsets.US_ASCII);
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         byte[] jdkHash = digest.digest(toHash);
         System.out.println("JDK hash: " + bytesToHex(jdkHash));
@@ -81,7 +78,10 @@ public class VectorSHA256 {
         // offset into buffer
         private int bufOfs;
         // size of the input to the compression function (transform) in bytes
-        private final int blockSize = 32 * 8;
+        private final int blockSize8x = 64 * 8;
+        private final int blockSize4x = 64 * 4;
+        private final int blockSize2x = 64 * 2;
+        private final int blockSize =   64;
         // length of the message digest in bytes
         private final int digestLength = 32;
         long bytesProcessed;
@@ -140,12 +140,16 @@ public class VectorSHA256 {
             }
             long bitsProcessed = bytesProcessed << 3;
             int index = (int) bytesProcessed & 0x3f;
+            System.out.println("bytesProcessed: " + bytesProcessed);
+            System.out.println("bitsProcessed: " + bitsProcessed);
+            System.out.println("index: " + index);
             int padLen = (index < 56) ? (56 - index) : (120 - index);
+            System.out.println("padding length: " + padLen);
             update(padding, 0, padLen);
             BE.INT_ARRAY.set(buffer, 56, (int) (bitsProcessed >>> 32));
             BE.INT_ARRAY.set(buffer, 60, (int) bitsProcessed);
             byte[] arr = new byte[256];
-            transform_8way(buffer, arr);
+            transform(buffer, arr);
             byte[] hash = new byte[32];
             // hash[0] =
             System.out.println("arr: " + bytesToHex(arr));
@@ -204,13 +208,44 @@ public class VectorSHA256 {
                 }
             }
 
-            if (len >= blockSize) {
-                System.out.println("len >= blockSize");
+            if (len >= blockSize8x) {
+                System.out.println("len >= blockSize8x");
+                int limit = inOff + len;
+                for (; inOff <= limit; inOff += blockSize8x) {
+                    byte[] out = new byte[blockSize8x];
+                    transform_8way(in, out);
+                    // FIXME: Actually we should set out to the last 32 bytes (the last hash of 8 computed)
+                    System.arraycopy(out, 0, buffer, 0, 32);
+                }
+                len = limit - inOff;
+            }
+
+            if (len >= blockSize4x) {
+                int limit = inOff + len;
+                for (; inOff <= limit; inOff += blockSize4x) {
+                    byte[] out = new byte[blockSize4x];
+                    transform_4way(in, out);
+                    System.arraycopy(out, 0, buffer, 0, 32);
+                }
+                len = limit - inOff;
+            }
+
+            if (len >= blockSize2x) {
+                int limit = inOff + len;
+                for (; inOff <= limit; inOff += blockSize2x) {
+                    byte[] out = new byte[blockSize2x];
+                    transform_2way(in, out);
+                    System.arraycopy(out, 0, buffer, 0, 32);
+                }
+                len = limit - inOff;
+            }
+
+            while (len >= blockSize) {
                 int limit = inOff + len;
                 for (; inOff <= limit; inOff += blockSize) {
-                    byte[] out = new byte[256];
-                    transform_8way(in, out);
-                    System.arraycopy(out, 0, buffer, 0, 256);
+                    byte[] out = new byte[blockSize];
+                    transform(in, out);
+                    System.arraycopy(out, 0, buffer, 0, 32);
                 }
                 len = limit - inOff;
             }
@@ -314,6 +349,26 @@ public class VectorSHA256 {
                     (byte)value};
         }
 
+        IntVector read4(byte[] chunk, int offset) {
+            /*
+            __m128i ret = _mm_set_epi32(
+        ReadLE32(chunk + 0 + offset),
+        ReadLE32(chunk + 64 + offset),
+        ReadLE32(chunk + 128 + offset),
+        ReadLE32(chunk + 192 + offset)
+    );
+    return _mm_shuffle_epi8(ret, _mm_set_epi32(0x0C0D0E0FUL, 0x08090A0BUL, 0x04050607UL, 0x00010203UL));
+             */
+            IntVector ret = IntVector.fromArray(SPECIES_128, new int[] {
+                bytesToIntLE(chunk, 0 + offset),
+                    bytesToIntLE(chunk, 32 + offset),
+                    bytesToIntLE(chunk, 64 + offset),
+                    bytesToIntLE(chunk, 96 + offset)
+            }, 0);
+
+            return ret;
+        }
+
         IntVector read8(byte[] chunk, int offset) {
             System.out.println("read8, offset = " + offset);
             System.out.println("chunk: " + Arrays.toString(chunk));
@@ -369,6 +424,18 @@ public class VectorSHA256 {
             IntVector t2 = add(Sigma0(a), maj(a, b, c));
             this.d = add(d, t1);
             this.h = add(t1, t2);
+        }
+
+        public void transform(byte[] in, byte[] out) {
+
+        }
+
+        public void transform_2way(byte[] in, byte[] out) {
+
+        }
+
+        public void transform_4way(byte[] in, byte[] out) {
+
         }
 
         /**
