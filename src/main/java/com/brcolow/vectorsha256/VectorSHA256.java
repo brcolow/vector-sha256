@@ -66,12 +66,8 @@ public class VectorSHA256 {
     }
 
     public static class Sha256Digest {
-        private IntVector dVec;
-        private IntVector hVec;
-        private int d;
-        private int h;
         private int[] H;
-        // buffer to store partial blocks, 64 bytes large
+        // buffer to store partial blocks, up to 64 bytes large
         byte[] buffer;
         // offset into buffer
         private int bufOfs;
@@ -86,8 +82,8 @@ public class VectorSHA256 {
         static final byte[] padding;
 
         static {
-            // we need 128 byte padding for SHA-384/512
-            padding = new byte[128];
+            padding = new byte[64];
+            // I believe this adds the 1-bit to the padding.
             padding[0] = (byte)0x80;
         }
 
@@ -145,8 +141,12 @@ public class VectorSHA256 {
             int padLen = (index < 56) ? (56 - index) : (120 - index);
             System.out.println("padding length: " + padLen);
             update(padding, 0, padLen);
+
             BE.INT_ARRAY.set(buffer, 56, (int) (bitsProcessed >>> 32));
+            System.out.println("shift = " + (4096L >>> 32));
+            System.out.println("Setting buffer[56-60] = " + ((int) (bitsProcessed >>> 32)));
             BE.INT_ARRAY.set(buffer, 60, (int) bitsProcessed);
+            System.out.println("Setting buffer[60-64] = " + (int) bitsProcessed);
             transform(buffer);
             byte[] hash = new byte[digestLength];
             intArrToBytesBE(H, hash, digestLength);
@@ -218,13 +218,16 @@ public class VectorSHA256 {
             if (len >= blockSize8x) {
                 System.out.println("len >= blockSize8x");
                 int limit = inOff + len;
-                for (; inOff <= limit; inOff += blockSize8x) {
+                System.out.println("limit: " + limit);
+                for (; inOff < limit; inOff += blockSize8x) {
+                    System.out.println("inOff: " + inOff);
                     transform_multi_way(in, SPECIES_256, this::read8);
                     byte[] hash = new byte[digestLength];
                     intArrToBytesBE(H, hash, digestLength);
                     System.out.println("H[] after 8way transform: " + bytesToHex(hash));
                 }
                 len = limit - inOff;
+                System.out.println("len is now: " + len);
             }
 
             if (len >= blockSize4x) {
@@ -264,7 +267,6 @@ public class VectorSHA256 {
                 System.arraycopy(in, inOff, buffer, 0, len);
                 bufOfs = len;
             }
-            System.out.println("buffer: " + bytesToHex(buffer));
         }
 
         IntVector add(IntVector x, IntVector y) {
@@ -397,7 +399,6 @@ public class VectorSHA256 {
 
         IntVector read8(byte[] chunk, int offset) {
             System.out.println("read8, offset = " + offset);
-            System.out.println("chunk: " + Arrays.toString(chunk));
             IntVector ret = IntVector.fromArray(SPECIES_256, new int[] {
                     bytesToIntLE(chunk, 0 + offset),
                     bytesToIntLE(chunk, 16 + offset),
@@ -414,6 +415,7 @@ public class VectorSHA256 {
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3 }, 0);
             ret.rearrange(shuffle, shuffle.laneIsValid());
+            System.out.println("read8 returns: " + bytesToHex(ret.reinterpretAsBytes().toArray()));
             return ret;
         }
 
@@ -444,21 +446,7 @@ public class VectorSHA256 {
             System.arraycopy(intToBytesLE(v.lane(2)), 0, out, 160 + offset, 4);
             System.arraycopy(intToBytesLE(v.lane(1)), 0, out, 192 + offset, 4);
             System.arraycopy(intToBytesLE(v.lane(0)), 0, out, 224 + offset, 4);
-            System.out.println("out: " + Arrays.toString(out));
-        }
-
-        private void round(IntVector a, IntVector b, IntVector c, IntVector d, IntVector e, IntVector f, IntVector g, IntVector h, IntVector k) {
-            IntVector t1 = add(h, Sigma1(e), ch(e, f, g), k);
-            IntVector t2 = add(Sigma0(a), maj(a, b, c));
-            this.dVec = add(d, t1);
-            this.hVec = add(t1, t2);
-        }
-
-        private void round(int a, int b, int c, int d, int e, int f, int g, int h, int k) {
-            int t1 = h + Sigma1(e) + ch(e, f, g) + k;
-            int t2 = Sigma0(a) + maj(a, b, c);
-            this.d = d + t1;
-            this.h = t1 + t2;
+            System.out.println("out: " + bytesToHex(out));
         }
 
         /**
@@ -466,6 +454,7 @@ public class VectorSHA256 {
          * @param in
          */
         private void transform(byte[] in) {
+            System.out.println("transform, in = " + bytesToHex(in));
             int a = H[0];
             int b = H[1];
             int c = H[2];
@@ -476,103 +465,340 @@ public class VectorSHA256 {
             int h = H[7];
 
             int w0 = bytesToIntBE(in, 0);
-            round(a, b, c, d, e, f, g, h, 0x428a2f98 + w0);
+            int t1 = h + Sigma1(e) + ch(e, f, g) + 0x428a2f98 + w0;
+            int t2= Sigma0(a) + maj(a, b, c);
+            d = d + t1;
+            h = t1 + t2;
 
             int w1 = bytesToIntBE(in, 4);
-            round(h, a, b, c, d, e, f, g, 0x71374491 + w1);
+            t1 = g + Sigma1(d) + ch(d, e, f) + 0x71374491 + w1;
+            t2 = Sigma0(h) + maj(h, a, b);
+            c = c + t1;
+            g = t1 + t2;
 
             int w2 = bytesToIntBE(in, 8);
-            round(g, h, a, b, c, d, e, f, 0xb5c0fbcf + w2);
+            t1 = f + Sigma1(c) + ch(c, d, e) + 0xb5c0fbcf + w2;
+            t2 = Sigma0(g) + maj(g, h, a);
+            b = b + t1;
+            f = t1 + t2;
 
             int w3 = bytesToIntBE(in, 12);
-            round(f, g, h, a, b, c, d, e, 0xe9b5dba5 + w3);
+            t1 = e + Sigma1(b) + ch(b, c, d) + 0xe9b5dba5 + w3;
+            t2 = Sigma0(f) + maj(f, g, h);
+            a = a + t1;
+            e = t1 + t2;
 
             int w4 = bytesToIntBE(in, 16);
-            round(e, f, g, h, a, b, c, d, 0x3956c25b + w4);
+            t1 = d + Sigma1(a) + ch(a, b, c) + 0x3956c25b + w4;
+            t2 = Sigma0(e) + maj(e, f, g);
+            h = h + t1;
+            d = t1 + t2;
 
             int w5 = bytesToIntBE(in, 20);
-            round(d, e, f, g, h, a, b, c, 0x59f111f1 + w5);
+            t1 = c + Sigma1(h) + ch(h, a, b) + 0x59f111f1 + w5;
+            t2 = Sigma0(d) + maj(d, e, f);
+            g = g + t1;
+            c = t1 + t2;
 
             int w6 = bytesToIntBE(in, 24);
-            round(c, d, e, f, g, h, a, b, 0x923f82a4 + w6);
+            t1 = b + Sigma1(g) + ch(g, h, a) + 0x923f82a4 + w6;
+            t2 = Sigma0(c) + maj(c, d, e);
+            f = f + t1;
+            b = t1 + t2;
 
             int w7 = bytesToIntBE(in, 28);
-            round(b, c, d, e, f, g, h, a, 0xab1c5ed5 + w7);
+            t1 = a + Sigma1(f) + ch(f, g, h) + 0xab1c5ed5 + w7;
+            t2 = Sigma0(b) + maj(b, c, d);
+            e = e + t1;
+            a = t1 + t2;
 
             int w8 = bytesToIntBE(in, 32);
-            round(a, b, c, d, e, f, g, h, 0xd807aa98 + w8);
+            t1 = h + Sigma1(e) + ch(e, f, g) + 0xd807aa98 + w8;
+            t2 = Sigma0(a) + maj(a, b, c);
+            d = d + t1;
+            h = t1 + t2;
 
             int w9 = bytesToIntBE(in, 36);
-            round(h, a, b, c, d, e, f, g, 0x12835b01 + w9);
+            t1 = g + Sigma1(d) + ch(d, e, f) + 0x12835b01 + w9;
+            t2 = Sigma0(h) + maj(h, a, b);
+            c = c + t1;
+            b = t1 + t2;
 
             int w10 = bytesToIntBE(in, 40);
-            round(g, h, a, b, c, d, e, f, 0x243185be + w10);
+            t1 = f + Sigma1(c) + ch(c, d, e) + 0x243185be + w10;
+            t2 = Sigma0(g) + maj(g, h, a);
+            b = b + t1;
+            f = t1 + t2;
 
             int w11 = bytesToIntBE(in, 44);
-            round(f, g, h, a, b, c, d, e, 0x550c7dc3 + w11);
+            t1 = e + Sigma1(b) + ch(b, c, d) + 0x550c7dc3 + w11;
+            t2 = Sigma0(f) + maj(f, g, h);
+            a = a + t1;
+            e = t1 + t2;
 
             int w12 = bytesToIntBE(in, 48);
-            round(e, f, g, h, a, b, c, d, 0x72be5d74 + w12);
+            t1 = d + Sigma1(a) + ch(a, b, c) + 0x72be5d74 + w12;
+            t2 = Sigma0(e) + maj(e, f, g);
+            h = h + t1;
+            d = t1 + t2;
 
             int w13 = bytesToIntBE(in, 52);
-            round(d, e, f, g, h, a, b, c, 0x80deb1fe + w13);
+            t1 = c + Sigma1(h) + ch(h, a, b) + 0x80deb1fe + w13;
+            t2 = Sigma0(d) + maj(d, e, f);
+            g = g + t1;
+            c = t1 + t2;
 
             int w14 = bytesToIntBE(in, 56);
-            round(c, d, e, f, g, h, a, b, 0x9bdc06a7 + w14);
+            t1 = b + Sigma1(g) + ch(g, h, a) + 0x9bdc06a7 + w14;
+            t2 = Sigma0(c) + maj(c, d, e);
+            f = f + t1;
+            b = t1 + t2;
 
             int w15 = bytesToIntBE(in, 60);
-            round(b, c, d, e, f, g, h, a, 0xc19bf174 + w15);
+            t1 = a + Sigma1(f) + ch(f, g, h) + 0xc19bf174 + w15;
+            t2 = Sigma0(b) + maj(b, c, d);
+            e = e + t1;
+            a = t1 + t2;
 
-            round(a, b, c, d, e, f, g, h, 0xe49b69c1 + (w0 += sigma1(w14) + w9 + sigma0(w1)));
-            round(h, a, b, c, d, e, f, g, 0xefbe4786 + (w1 += sigma1(w15) + w10 + sigma0(w2)));
-            round(g, h, a, b, c, d, e, f, 0x0fc19dc6 + (w2 += sigma1(w0) + w11 + sigma0(w3)));
-            round(f, g, h, a, b, c, d, e, 0x240ca1cc + (w3 += sigma1(w1) + w12 + sigma0(w4)));
-            round(e, f, g, h, a, b, c, d, 0x2de92c6f + (w4 += sigma1(w2) + w13 + sigma0(w5)));
-            round(d, e, f, g, h, a, b, c, 0x4a7484aa + (w5 += sigma1(w3) + w14 + sigma0(w6)));
-            round(c, d, e, f, g, h, a, b, 0x5cb0a9dc + (w6 += sigma1(w4) + w15 + sigma0(w7)));
-            round(b, c, d, e, f, g, h, a, 0x76f988da + (w7 += sigma1(w5) + w0 + sigma0(w8)));
-            round(a, b, c, d, e, f, g, h, 0x983e5152 + (w8 += sigma1(w6) + w1 + sigma0(w9)));
-            round(h, a, b, c, d, e, f, g, 0xa831c66d + (w9 += sigma1(w7) + w2 + sigma0(w10)));
-            round(g, h, a, b, c, d, e, f, 0xb00327c8 + (w10 += sigma1(w8) + w3 + sigma0(w11)));
-            round(f, g, h, a, b, c, d, e, 0xbf597fc7 + (w11 += sigma1(w9) + w4 + sigma0(w12)));
-            round(e, f, g, h, a, b, c, d, 0xc6e00bf3 + (w12 += sigma1(w10) + w5 + sigma0(w13)));
-            round(d, e, f, g, h, a, b, c, 0xd5a79147 + (w13 += sigma1(w11) + w6 + sigma0(w14)));
-            round(c, d, e, f, g, h, a, b, 0x06ca6351 + (w14 += sigma1(w12) + w7 + sigma0(w15)));
-            round(b, c, d, e, f, g, h, a, 0x14292967 + (w15 += sigma1(w13) + w8 + sigma0(w0)));
+            t1 = h + Sigma1(e) + ch(e, f, g) + 0xe49b69c1 + (w0 += sigma1(w14) + w9 + sigma0(w1));
+            t2 = Sigma0(a) + maj(a, b, c);
+            d = d + t1;
+            h = t1 + t2;
 
-            round(a, b, c, d, e, f, g, h, 0x27b70a85 + (w0 += sigma1(w14) + w9 + sigma0(w1)));
-            round(h, a, b, c, d, e, f, g, 0x2e1b2138 + (w1 += sigma1(w15) + w10 + sigma0(w2)));
-            round(g, h, a, b, c, d, e, f, 0x4d2c6dfc + (w2 += sigma1(w0) + w11 + sigma0(w3)));
-            round(f, g, h, a, b, c, d, e, 0x53380d13 + (w3 += sigma1(w1) + w12 + sigma0(w4)));
-            round(e, f, g, h, a, b, c, d, 0x650a7354 + (w4 += sigma1(w2) + w13 + sigma0(w5)));
-            round(d, e, f, g, h, a, b, c, 0x766a0abb + (w5 += sigma1(w3) + w14 + sigma0(w6)));
-            round(c, d, e, f, g, h, a, b, 0x81c2c92e + (w6 += sigma1(w4) + w15 + sigma0(w7)));
-            round(b, c, d, e, f, g, h, a, 0x92722c85 + (w7 += sigma1(w5) + w0 + sigma0(w8)));
-            round(a, b, c, d, e, f, g, h, 0xa2bfe8a1 + (w8 += sigma1(w6) + w1 + sigma0(w9)));
-            round(h, a, b, c, d, e, f, g, 0xa81a664b + (w9 += sigma1(w7) + w2 + sigma0(w10)));
-            round(g, h, a, b, c, d, e, f, 0xc24b8b70 + (w10 += sigma1(w8) + w3 + sigma0(w11)));
-            round(f, g, h, a, b, c, d, e, 0xc76c51a3 + (w11 += sigma1(w9) + w4 + sigma0(w12)));
-            round(e, f, g, h, a, b, c, d, 0xd192e819 + (w12 += sigma1(w10) + w5 + sigma0(w13)));
-            round(d, e, f, g, h, a, b, c, 0xd6990624 + (w13 += sigma1(w11) + w6 + sigma0(w14)));
-            round(c, d, e, f, g, h, a, b, 0xf40e3585 + (w14 += sigma1(w12) + w7 + sigma0(w15)));
-            round(b, c, d, e, f, g, h, a, 0x106aa070 + (w15 += sigma1(w13) + w8 + sigma0(w0)));
+            t1 = c + Sigma1(d) + ch(d, e, f) + 0xefbe4786 + (w1 += sigma1(w15) + w10 + sigma0(w2));
+            t2 = Sigma0(h) + maj(h, a, b);
+            c = c + t1;
+            g = t1 + t2;
 
-            round(a, b, c, d, e, f, g, h, 0x19a4c116 + (w0 += sigma1(w14) + w9 + sigma0(w1)));
-            round(h, a, b, c, d, e, f, g, 0x1e376c08 + (w1 += sigma1(w15) + w10 + sigma0(w2)));
-            round(g, h, a, b, c, d, e, f, 0x2748774c + (w2 += sigma1(w0) + w11 + sigma0(w3)));
-            round(f, g, h, a, b, c, d, e, 0x34b0bcb5 + (w3 += sigma1(w1) + w12 + sigma0(w4)));
-            round(e, f, g, h, a, b, c, d, 0x391c0cb3 + (w4 += sigma1(w2) + w13 + sigma0(w5)));
-            round(d, e, f, g, h, a, b, c, 0x4ed8aa4a + (w5 += sigma1(w3) + w14 + sigma0(w6)));
-            round(c, d, e, f, g, h, a, b, 0x5b9cca4f + (w6 += sigma1(w4) + w15 + sigma0(w7)));
-            round(b, c, d, e, f, g, h, a, 0x682e6ff3 + (w7 += sigma1(w5) + w0 + sigma0(w8)));
-            round(a, b, c, d, e, f, g, h, 0x748f82ee + (w8 += sigma1(w6) + w1 + sigma0(w9)));
-            round(h, a, b, c, d, e, f, g, 0x78a5636f + (w9 += sigma1(w7) + w2 + sigma0(w10)));
-            round(g, h, a, b, c, d, e, f, 0x84c87814 + (w10 += sigma1(w8) + w3 + sigma0(w11)));
-            round(f, g, h, a, b, c, d, e, 0x8cc70208 + (w11 += sigma1(w9) + w4 + sigma0(w12)));
-            round(e, f, g, h, a, b, c, d, 0x90befffa + (w12 += sigma1(w10) + w5 + sigma0(w13)));
-            round(d, e, f, g, h, a, b, c, 0xa4506ceb + (w13 += sigma1(w11) + w6 + sigma0(w14)));
-            round(c, d, e, f, g, h, a, b, 0xbef9a3f7 + (w14 + sigma1(w12) + w7 + sigma0(w15)));
-            round(b, c, d, e, f, g, h, a, 0xc67178f2 + (w15 + sigma1(w13) + w8 + sigma0(w0)));
+            t1 = f + Sigma1(c) + ch(c, d, e) + 0x0fc19dc6 + (w2 += sigma1(w0) + w11 + sigma0(w3));
+            t2 = Sigma0(g) + maj(g, h, a);
+            b = b + t1;
+            f = t1 + t2;
+
+            t1 = e + Sigma1(b) + ch(b, c, d) + 0x240ca1cc + (w3 += sigma1(w1) + w12 + sigma0(w4));
+            t2 = Sigma0(f) + maj(f, g, h);
+            a = a + t1;
+            e = t1 + t2;
+
+            t1 = d + Sigma1(a) + ch(a, b, c) + 0x2de92c6f + (w4 += sigma1(w2) + w13 + sigma0(w5));
+            t2 = Sigma0(e) + maj(e, f, g);
+            h = h + t1;
+            d = t1 + t2;
+
+            t1 = c + Sigma1(h) + ch(h, a, b) + 0x4a7484aa + (w5 += sigma1(w3) + w14 + sigma0(w6));
+            t2 = Sigma0(d) + maj(d, e, f);
+            g = g + t1;
+            c = t1 + t2;
+
+            t1 = b + Sigma1(g) + ch(g, h, a) + 0x5cb0a9dc + (w6 += sigma1(w4) + w15 + sigma0(w7));
+            t2 = Sigma0(c) + maj(c, d, e);
+            f = f + t1;
+            b = t1 + t2;
+
+            t1 = a + Sigma1(f) + ch(f, g, h) + 0x76f988da + (w7 += sigma1(w5) + w0 + sigma0(w8));
+            t2 = Sigma0(b) + maj(b, c, d);
+            e = e + t1;
+            a = t1 + t2;
+
+            t1 = h + Sigma1(e) + ch(e, f, g) + 0x983e5152 + (w8 += sigma1(w6) + w1 + sigma0(w9));
+            t2= Sigma0(a) + maj(a, b, c);
+            d = d + t1;
+            h = t1 + t2;
+
+            t1 = g + Sigma1(d) + ch(d, e, f) + 0xa831c66d + (w9 += sigma1(w7) + w2 + sigma0(w10));
+            t2 = Sigma0(h) + maj(h, a, b);
+            c = c + t1;
+            g = t1 + t2;
+
+            t1 = f + Sigma1(c) + ch(c, d, e) + 0xb00327c8 + (w10 += sigma1(w8) + w3 + sigma0(w11));
+            t2 = Sigma0(g) + maj(g, h, a);
+            b = b + t1;
+            f = t1 + t2;
+
+            t1 = e + Sigma1(b) + ch(b, c, d) + 0xbf597fc7 + (w11 += sigma1(w9) + w4 + sigma0(w12));
+            t2 = Sigma0(f) + maj(f, g, h);
+            a = a + t1;
+            e = t1 + t2;
+
+            t1 = d + Sigma1(a) + ch(a, b, c) + 0xc6e00bf3 + (w12 += sigma1(w10) + w5 + sigma0(w13));
+            t2 = Sigma0(e) + maj(e, f, g);
+            h = h + t1;
+            d = t1 + t2;
+
+            t1 = c + Sigma1(h) + ch(h, a, b) + 0xd5a79147 + (w13 += sigma1(w11) + w6 + sigma0(w14));
+            t2 = Sigma0(d) + maj(d, e, f);
+            g = g + t1;
+            c = t1 + t2;
+
+            t1 = b + Sigma1(g) + ch(g, h, a) + 0x06ca6351 + (w14 += sigma1(w12) + w7 + sigma0(w15));
+            t2 = Sigma0(c) + maj(c, d, e);
+            f = f + t1;
+            b = t1 + t2;
+
+            t1 = a + Sigma1(f) + ch(f, g, h) + 0x14292967 + (w15 += sigma1(w13) + w8 + sigma0(w0));
+            t2 = Sigma0(b) + maj(b, c, d);
+            e = e + t1;
+            a = t1 + t2;
+
+            t1 = h + Sigma1(e) + ch(e, f, g) + 0x27b70a85 + (w0 += sigma1(w14) + w9 + sigma0(w1));
+            t2 = Sigma0(a) + maj(a, b, c);
+            d = d + t1;
+            h = t1 + t2;
+
+            t1 = g + Sigma1(d) + ch(d, e, f) + 0x2e1b2138 + (w1 += sigma1(w15) + w10 + sigma0(w2));
+            t2 = Sigma0(h) + maj(h, a, b);
+            c = c + t1;
+            g = t1 + t2;
+
+            t1 = f + Sigma1(c) + ch(c, d, e) + 0x4d2c6dfc + (w2 += sigma1(w0) + w11 + sigma0(w3));
+            t2 = Sigma0(g) + maj(g, h, a);
+            b = b + t1;
+            f = t1 + t2;
+
+            t1 = e + Sigma1(b) + ch(b, c, d) + 0x53380d13 + (w3 += sigma1(w1) + w12 + sigma0(w4));
+            t2 = Sigma0(f) + maj(f, g, h);
+            a = a + t1;
+            e = t1 + t2;
+
+            t1 = d + Sigma1(a) + ch(a, b, c) + 0x650a7354 + (w4 += sigma1(w2) + w13 + sigma0(w5));
+            t2 = Sigma0(e) + maj(e, f, g);
+            h = h + t1;
+            d = t1 + t2;
+
+            t1 = c + Sigma1(h) + ch(h, a, b) + 0x766a0abb + (w5 += sigma1(w3) + w14 + sigma0(w6));
+            t2 = Sigma0(d) + maj(d, e, f);
+            g = g + t1;
+            c = t1 + t2;
+
+            t1 = b + Sigma1(g) + ch(g, h, a) + 0x81c2c92e + (w6 += sigma1(w4) + w15 + sigma0(w7));
+            t2 = Sigma0(c) + maj(c, d, e);
+            f = f + t1;
+            b = t1 + t2;
+
+            t1 = a + Sigma1(f) + ch(f, g, h) + 0x92722c85 + (w7 += sigma1(w5) + w0 + sigma0(w8));
+            t2 = Sigma0(b) + maj(b, c, d);
+            e = e + t1;
+            a = t1 + t2;
+
+            t1 = h + Sigma1(e) + ch(e, f, g) + 0xa2bfe8a1 + (w8 += sigma1(w6) + w1 + sigma0(w9));
+            t2 = Sigma0(a) + maj(a, b, c);
+            d = d + t1;
+            h = t1 + t2;
+
+            t1 = g + Sigma1(d) + ch(d, e, f) + 0xa81a664b + (w9 += sigma1(w7) + w2 + sigma0(w10));
+            t2 = Sigma0(h) + maj(h, a, b);
+            c = c + t1;
+            g = t1 + t2;
+
+            t1 = f + Sigma1(c) + ch(c, d, e) + 0xc24b8b70 + (w10 += sigma1(w8) + w3 + sigma0(w11));
+            t2 = Sigma0(g) + maj(g, h, a);
+            b = b + t1;
+            f = t1 + t2;
+
+            t1 = e + Sigma1(b) + ch(b, c, d) + 0xc76c51a3 + (w11 += sigma1(w9) + w4 + sigma0(w12));
+            t2 = Sigma0(f) + maj(f, g, h);
+            a = a + t1;
+            e = t1 + t2;
+
+            t1 = d + Sigma1(a) + ch(a, b, c) + 0xd192e819 + (w12 += sigma1(w10) + w5 + sigma0(w13));
+            t2 = Sigma0(e) + maj(e, f, g);
+            h = h + t1;
+            d = t1 + t2;
+
+            t1 = c + Sigma1(h) + ch(h, a, b) + 0xd6990624 + (w13 += sigma1(w11) + w6 + sigma0(w14));
+            t2 = Sigma0(d) + maj(d, e, f);
+            g = g + t1;
+            c = t1 + t2;
+
+            t1 = b + Sigma1(g) + ch(g, h, a) + 0xf40e3585 + (w14 += sigma1(w12) + w7 + sigma0(w15));
+            t2 = Sigma0(c) + maj(c, d, e);
+            f = f + t1;
+            b = t1 + t2;
+
+            t1 = a + Sigma1(f) + ch(f, g, h) + 0x106aa070 + (w15 += sigma1(w13) + w8 + sigma0(w0));
+            t2 = Sigma0(b) + maj(b, c, d);
+            e = e + t1;
+            a = t1 + t2;
+
+            t1 = h + Sigma1(e) + ch(e, f, g) + 0x19a4c116 + (w0 += sigma1(w14) + w9 + sigma0(w1));
+            t2 = Sigma0(a) + maj(a, b, c);
+            d = d + t1;
+            h = t1 + t2;
+
+            t1 = g + Sigma1(d) + ch(d, e, f) + 0x1e376c08 + (w1 += sigma1(w15) + w10 + sigma0(w2));
+            t2 = Sigma0(h) + maj(h, a, b);
+            c = c + t1;
+            g = t1 + t2;
+
+            t1 = f + Sigma1(c) + ch(c, d, e) + 0x2748774c + (w2 += sigma1(w0) + w11 + sigma0(w3));
+            t2 = Sigma0(g) + maj(g, h, a);
+            b = b + t1;
+            f = t1 + t2;
+
+            t1 = e + Sigma1(b) + ch(b, c, d) + 0x34b0bcb5 + (w3 += sigma1(w1) + w12 + sigma0(w4));
+            t2 = Sigma0(f) + maj(f, g, h);
+            a = a + t1;
+            e = t1 + t2;
+
+            t1 = d + Sigma1(a) + ch(a, b, c) + 0x391c0cb3 + (w4 += sigma1(w2) + w13 + sigma0(w5));
+            t2 = Sigma0(e) + maj(e, f, g);
+            h = h + t1;
+            d = t1 + t2;
+
+            t1 = c + Sigma1(h) + ch(h, a, b) + 0x4ed8aa4a + (w5 += sigma1(w3) + w14 + sigma0(w6));
+            t2 = Sigma0(d) + maj(d, e, f);
+            g = g + t1;
+            c = t1 + t2;
+
+            t1 = b + Sigma1(g) + ch(g, h, a) + 0x5b9cca4f + (w6 += sigma1(w4) + w15 + sigma0(w7));
+            t2 = Sigma0(c) + maj(c, d, e);
+            f = f + t1;
+            b = t1 + t2;
+
+            t1 = a + Sigma1(f) + ch(f, g, h) + 0x682e6ff3 + (w7 += sigma1(w5) + w0 + sigma0(w8));
+            t2 = Sigma0(b) + maj(b, c, d);
+            e = e + t1;
+            a = t1 + t2;
+
+            t1 = h + Sigma1(e) + ch(e, f, g) + 0x748f82ee + (w8 += sigma1(w6) + w1 + sigma0(w9));
+            t2 = Sigma0(a) + maj(a, b, c);
+            d = d + t1;
+            h = t1 + t2;
+
+            t1 = g + Sigma1(d) + ch(d, e, f) + 0x78a5636f + (w9 += sigma1(w7) + w2 + sigma0(w10));
+            t2 = Sigma0(h) + maj(h, a, b);
+            c = c + t1;
+            g = t1 + t2;
+
+            t1 = f + Sigma1(c) + ch(c, d, e) + 0x84c87814 + (w10 += sigma1(w8) + w3 + sigma0(w11));
+            t2 = Sigma0(g) + maj(g, h, a);
+            b = b + t1;
+            f = t1 + t2;
+
+            t1 = e + Sigma1(b) + ch(b, c, d) + 0x8cc70208 + (w11 += sigma1(w9) + w4 + sigma0(w12));
+            t2 = Sigma0(f) + maj(f, g, h);
+            a = a + t1;
+            e = t1 + t2;
+
+            t1 = d + Sigma1(a) + ch(a, b, c) + 0x90befffa + (w12 += sigma1(w10) + w5 + sigma0(w13));
+            t2 = Sigma0(e) + maj(e, f, g);
+            h = h + t1;
+            d = t1 + t2;
+
+            t1 = c + Sigma1(h) + ch(h, a, b) + 0xa4506ceb + (w13 += sigma1(w11) + w6 + sigma0(w14));
+            t2 = Sigma0(d) + maj(d, e, f);
+            g = g + t1;
+            c = t1 + t2;
+
+            t1 = b + Sigma1(g) + ch(g, h, a) + 0xbef9a3f7 + (w14 + sigma1(w12) + w7 + sigma0(w15));
+            t2 = Sigma0(c) + maj(c, d, e);
+            f = f + t1;
+            b = t1 + t2;
+
+            t1 = a + Sigma1(f) + ch(f, g, h) + 0xc67178f2 + (w15 + sigma1(w13) + w8 + sigma0(w0));
+            t2 = Sigma0(b) + maj(b, c, d);
+            e = e + t1;
+            a = t1 + t2;
 
             H[0] += a;
             H[1] += b;
@@ -609,101 +835,341 @@ public class VectorSHA256 {
             IntVector hVec = IntVector.broadcast(species, H[7]);
 
             IntVector w0 = readFunc.apply(in, 0);
-            round(aVec, bVec, cVec, dVec, eVec, fVec, gVec, hVec, add(IntVector.broadcast(species, 0x428a2f98), w0));
+            System.out.println("avec before: " + bytesToHex(aVec.reinterpretAsBytes().toArray()));
+            IntVector t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x428a2f98), w0));
+            IntVector t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
+            dVec = add(dVec, t2);
+            hVec = add(t1, t2);
+            System.out.println("avec after: " + bytesToHex(aVec.reinterpretAsBytes().toArray()));
 
             IntVector w1 = readFunc.apply(in, 4);
-            round(hVec, aVec, bVec, cVec, dVec, eVec, fVec, gVec, add(IntVector.broadcast(species, 0x71374491), w1));
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, hVec), add(IntVector.broadcast(species, 0x71374491), w1));
+            t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
+            cVec = add(cVec, t2);
+            gVec = add(t1, t2);
 
             IntVector w2 = readFunc.apply(in, 8);
-            round(gVec, hVec, aVec, bVec, cVec, dVec, eVec, fVec, add(IntVector.broadcast(species, 0xb5c0fbcf), w2));
+            t1= add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0xb5c0fbcf), w2));
+            t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
+            bVec = add(bVec, t2);
+            fVec = add(t1, t2);
 
             IntVector w3 = readFunc.apply(in, 12);
-            round(fVec, gVec, hVec, aVec, bVec, cVec, dVec, eVec, add(IntVector.broadcast(species, 0xe9b5dba5), w3));
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0xe9b5dba5), w3));
+            t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
+            aVec = add(aVec, t2);
+            eVec = add(t1, t2);
 
             IntVector w4 = readFunc.apply(in, 16);
-            round(eVec, fVec, gVec, hVec, aVec, bVec, cVec, dVec, add(IntVector.broadcast(species, 0x3956c25b), w4));
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x3956c25b), w4));
+            t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
+            hVec = add(hVec, t2);
+            dVec = add(t1, t2);
 
             IntVector w5 = readFunc.apply(in, 20);
-            round(dVec, eVec, fVec, gVec, hVec, aVec, bVec, cVec, add(IntVector.broadcast(species, 0x59f111f1), w5));
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x59f111f1), w5));
+            t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
+            gVec = add(gVec, t2);
+            cVec = add(t1, t2);
 
             IntVector w6 = readFunc.apply(in, 24);
-            round(cVec, dVec, eVec, fVec, gVec, hVec, aVec, bVec, add(IntVector.broadcast(species, 0x923f82a4), w6));
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x923f82a4), w6));
+            t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
+            fVec = add(fVec, t2);
+            bVec = add(t1, t2);
 
             IntVector w7 = readFunc.apply(in, 28);
-            round(bVec, cVec, dVec, eVec, fVec, gVec, hVec, aVec, add(IntVector.broadcast(species, 0xab1c5ed5), w7));
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0xab1c5ed5), w7));
+            t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
+            eVec = add(eVec, t2);
+            aVec = add(t1, t2);
 
             IntVector w8 = readFunc.apply(in, 32);
-            round(aVec, bVec, cVec, dVec, eVec, fVec, gVec, hVec, add(IntVector.broadcast(species, 0xd807aa98), w8));
+            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0xd807aa98), w8));
+            t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
+            dVec = add(dVec, t2);
+            hVec = add(t1, t2);
 
             IntVector w9 = readFunc.apply(in, 36);
-            round(hVec, aVec, bVec, cVec, dVec, eVec, fVec, gVec, add(IntVector.broadcast(species, 0x12835b01), w9));
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x12835b01), w9));
+            t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
+            cVec = add(cVec, t2);
+            gVec = add(t1, t2);
 
             IntVector w10 = readFunc.apply(in, 40);
-            round(gVec, hVec, aVec, bVec, cVec, dVec, eVec, fVec, add(IntVector.broadcast(species, 0x243185be), w10));
+            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x243185be), w10));
+            t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
+            bVec = add(bVec, t2);
+            fVec = add(t1, t2);
 
             IntVector w11 = readFunc.apply(in, 44);
-            round(fVec, gVec, hVec, aVec, bVec, cVec, dVec, eVec, add(IntVector.broadcast(species, 0x550c7dc3), w11));
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x550c7dc3), w11));
+            t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
+            aVec = add(aVec, t2);
+            eVec = add(t1, t2);
 
             IntVector w12 = readFunc.apply(in, 48);
-            round(eVec, fVec, gVec, hVec, aVec, bVec, cVec, dVec, add(IntVector.broadcast(species, 0x72be5d74), w12));
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x72be5d74), w12));
+            t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
+            hVec = add(hVec, t2);
+            dVec = add(t1, t2);
 
             IntVector w13 = readFunc.apply(in, 52);
-            round(dVec, eVec, fVec, gVec, hVec, aVec, bVec, cVec, add(IntVector.broadcast(species, 0x80deb1fe), w13));
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x80deb1fe), w13));
+            t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
+            gVec = add(gVec, t2);
+            cVec = add(t1, t2);
 
             IntVector w14 = readFunc.apply(in, 56);
-            round(cVec, dVec, eVec, fVec, gVec, hVec, aVec, bVec, add(IntVector.broadcast(species, 0x9bdc06a7), w14));
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x9bdc06a7), w14));
+            t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
+            fVec = add(fVec, t2);
+            bVec = add(t1, t2);
 
             IntVector w15 = readFunc.apply(in, 60);
-            round(bVec, cVec, dVec, eVec, fVec, gVec, hVec, aVec, add(IntVector.broadcast(species, 0xc19bf174), w15));
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0xc19bf174), w15));
+            t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
+            eVec = add(eVec, t2);
+            aVec = add(t1, t2);
 
-            round(aVec, bVec, cVec, dVec, eVec, fVec, gVec, hVec, add(IntVector.broadcast(species, 0xe49b69c1), inc(w0, sigma1(w14), w9, sigma0(w1))));
-            round(hVec, aVec, bVec, cVec, dVec, eVec, fVec, gVec, add(IntVector.broadcast(species, 0xefbe4786), inc(w1, sigma1(w15), w10, sigma0(w2))));
-            round(gVec, hVec, aVec, bVec, cVec, dVec, eVec, fVec, add(IntVector.broadcast(species, 0x0fc19dc6), inc(w2, sigma1(w0), w11, sigma0(w3))));
-            round(fVec, gVec, hVec, aVec, bVec, cVec, dVec, eVec, add(IntVector.broadcast(species, 0x240ca1cc), inc(w3, sigma1(w1), w12, sigma0(w4))));
-            round(eVec, fVec, gVec, hVec, aVec, bVec, cVec, dVec, add(IntVector.broadcast(species, 0x2de92c6f), inc(w4, sigma1(w2), w13, sigma0(w5))));
-            round(dVec, eVec, fVec, gVec, hVec, aVec, bVec, cVec, add(IntVector.broadcast(species, 0x4a7484aa), inc(w5, sigma1(w3), w14, sigma0(w6))));
-            round(cVec, dVec, eVec, fVec, gVec, hVec, aVec, bVec, add(IntVector.broadcast(species, 0x5cb0a9dc), inc(w6, sigma1(w4), w15, sigma0(w7))));
-            round(bVec, cVec, dVec, eVec, fVec, gVec, hVec, aVec, add(IntVector.broadcast(species, 0x76f988da), inc(w7, sigma1(w5), w0, sigma0(w8))));
-            round(aVec, bVec, cVec, dVec, eVec, fVec, gVec, hVec, add(IntVector.broadcast(species, 0x983e5152), inc(w8, sigma1(w6), w1, sigma0(w9))));
-            round(hVec, aVec, bVec, cVec, dVec, eVec, fVec, gVec, add(IntVector.broadcast(species, 0xa831c66d), inc(w9, sigma1(w7), w2, sigma0(w10))));
-            round(gVec, hVec, aVec, bVec, cVec, dVec, eVec, fVec, add(IntVector.broadcast(species, 0xb00327c8), inc(w10, sigma1(w8), w3, sigma0(w11))));
-            round(fVec, gVec, hVec, aVec, bVec, cVec, dVec, eVec, add(IntVector.broadcast(species, 0xbf597fc7), inc(w11, sigma1(w9), w4, sigma0(w12))));
-            round(eVec, fVec, gVec, hVec, aVec, bVec, cVec, dVec, add(IntVector.broadcast(species, 0xc6e00bf3), inc(w12, sigma1(w10), w5, sigma0(w13))));
-            round(dVec, eVec, fVec, gVec, hVec, aVec, bVec, cVec, add(IntVector.broadcast(species, 0xd5a79147), inc(w13, sigma1(w11), w6, sigma0(w14))));
-            round(cVec, dVec, eVec, fVec, gVec, hVec, aVec, bVec, add(IntVector.broadcast(species, 0x06ca6351), inc(w14, sigma1(w12), w7, sigma0(w15))));
-            round(bVec, cVec, dVec, eVec, fVec, gVec, hVec, aVec, add(IntVector.broadcast(species, 0x14292967), inc(w15, sigma1(w13), w8, sigma0(w0))));
-            round(aVec, bVec, cVec, dVec, eVec, fVec, gVec, hVec, add(IntVector.broadcast(species, 0x27b70a85), inc(w0, sigma1(w14), w9, sigma0(w1))));
-            round(hVec, aVec, bVec, cVec, dVec, eVec, fVec, gVec, add(IntVector.broadcast(species, 0x2e1b2138), inc(w1, sigma1(w15), w10, sigma0(w2))));
-            round(gVec, hVec, aVec, bVec, cVec, dVec, eVec, fVec, add(IntVector.broadcast(species, 0x4d2c6dfc), inc(w2, sigma1(w0), w11, sigma0(w3))));
-            round(fVec, gVec, hVec, aVec, bVec, cVec, dVec, eVec, add(IntVector.broadcast(species, 0x53380d13), inc(w3, sigma1(w1), w12, sigma0(w4))));
-            round(eVec, fVec, gVec, hVec, aVec, bVec, cVec, dVec, add(IntVector.broadcast(species, 0x650a7354), inc(w4, sigma1(w2), w13, sigma0(w5))));
-            round(dVec, eVec, fVec, gVec, hVec, aVec, bVec, cVec, add(IntVector.broadcast(species, 0x766a0abb), inc(w5, sigma1(w3), w14, sigma0(w6))));
-            round(cVec, dVec, eVec, fVec, gVec, hVec, aVec, bVec, add(IntVector.broadcast(species, 0x81c2c92e), inc(w6, sigma1(w4), w15, sigma0(w7))));
-            round(bVec, cVec, dVec, eVec, fVec, gVec, hVec, aVec, add(IntVector.broadcast(species, 0x92722c85), inc(w7, sigma1(w5), w0, sigma0(w8))));
-            round(aVec, bVec, cVec, dVec, eVec, fVec, gVec, hVec, add(IntVector.broadcast(species, 0xa2bfe8a1), inc(w8, sigma1(w6), w1, sigma0(w9))));
-            round(hVec, aVec, bVec, cVec, dVec, eVec, fVec, gVec, add(IntVector.broadcast(species, 0xa81a664b), inc(w9, sigma1(w7), w2, sigma0(w10))));
-            round(gVec, hVec, aVec, bVec, cVec, dVec, eVec, fVec, add(IntVector.broadcast(species, 0xc24b8b70), inc(w10, sigma1(w8), w3, sigma0(w11))));
-            round(fVec, gVec, hVec, aVec, bVec, cVec, dVec, eVec, add(IntVector.broadcast(species, 0xc76c51a3), inc(w11, sigma1(w9), w4, sigma0(w12))));
-            round(eVec, fVec, gVec, hVec, aVec, bVec, cVec, dVec, add(IntVector.broadcast(species, 0xd192e819), inc(w12, sigma1(w10), w5, sigma0(w13))));
-            round(dVec, eVec, fVec, gVec, hVec, aVec, bVec, cVec, add(IntVector.broadcast(species, 0xd6990624), inc(w13, sigma1(w11), w6, sigma0(w14))));
-            round(cVec, dVec, eVec, fVec, gVec, hVec, aVec, bVec, add(IntVector.broadcast(species, 0xf40e3585), inc(w14, sigma1(w12), w7, sigma0(w15))));
-            round(bVec, cVec, dVec, eVec, fVec, gVec, hVec, aVec, add(IntVector.broadcast(species, 0x106aa070), inc(w15, sigma1(w13), w8, sigma0(w0))));
-            round(aVec, bVec, cVec, dVec, eVec, fVec, gVec, hVec, add(IntVector.broadcast(species, 0x19a4c116), inc(w0, sigma1(w14), w9, sigma0(w1))));
-            round(hVec, aVec, bVec, cVec, dVec, eVec, fVec, gVec, add(IntVector.broadcast(species, 0x1e376c08), inc(w1, sigma1(w15), w10, sigma0(w2))));
-            round(gVec, hVec, aVec, bVec, cVec, dVec, eVec, fVec, add(IntVector.broadcast(species, 0x2748774c), inc(w2, sigma1(w0), w11, sigma0(w3))));
-            round(fVec, gVec, hVec, aVec, bVec, cVec, dVec, eVec, add(IntVector.broadcast(species, 0x34b0bcb5), inc(w3, sigma1(w1), w12, sigma0(w4))));
-            round(eVec, fVec, gVec, hVec, aVec, bVec, cVec, dVec, add(IntVector.broadcast(species, 0x391c0cb3), inc(w4, sigma1(w2), w13, sigma0(w5))));
-            round(dVec, eVec, fVec, gVec, hVec, aVec, bVec, cVec, add(IntVector.broadcast(species, 0x4ed8aa4a), inc(w5, sigma1(w3), w14, sigma0(w6))));
-            round(cVec, dVec, eVec, fVec, gVec, hVec, aVec, bVec, add(IntVector.broadcast(species, 0x5b9cca4f), inc(w6, sigma1(w4), w15, sigma0(w7))));
-            round(bVec, cVec, dVec, eVec, fVec, gVec, hVec, aVec, add(IntVector.broadcast(species, 0x682e6ff3), inc(w7, sigma1(w5), w0, sigma0(w8))));
-            round(aVec, bVec, cVec, dVec, eVec, fVec, gVec, hVec, add(IntVector.broadcast(species, 0x748f82ee), inc(w8, sigma1(w6), w1, sigma0(w9))));
-            round(hVec, aVec, bVec, cVec, dVec, eVec, fVec, gVec, add(IntVector.broadcast(species, 0x78a5636f), inc(w9, sigma1(w7), w2, sigma0(w10))));
-            round(gVec, hVec, aVec, bVec, cVec, dVec, eVec, fVec, add(IntVector.broadcast(species, 0x84c87814), inc(w10, sigma1(w8), w3, sigma0(w11))));
-            round(fVec, gVec, hVec, aVec, bVec, cVec, dVec, eVec, add(IntVector.broadcast(species, 0x8cc70208), inc(w11, sigma1(w9), w4, sigma0(w12))));
-            round(eVec, fVec, gVec, hVec, aVec, bVec, cVec, dVec, add(IntVector.broadcast(species, 0x90befffa), inc(w12, sigma1(w10), w5, sigma0(w13))));
-            round(dVec, eVec, fVec, gVec, hVec, aVec, bVec, cVec, add(IntVector.broadcast(species, 0xa4506ceb), inc(w13, sigma1(w11), w6, sigma0(w14))));
-            round(cVec, dVec, eVec, fVec, gVec, hVec, aVec, bVec, add(IntVector.broadcast(species, 0xbef9a3f7), inc(w14, sigma1(w12), w7, sigma0(w15))));
-            round(bVec, cVec, dVec, eVec, fVec, gVec, hVec, aVec, add(IntVector.broadcast(species, 0xc67178f2), inc(w15, sigma1(w13), w8, sigma0(w0))));
+            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0xe49b69c1), inc(w0, sigma1(w14), w9, sigma0(w1))));
+            t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
+            dVec = add(dVec, t2);
+            hVec = add(t1, t2);
+
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0xefbe4786), inc(w1, sigma1(w15), w10, sigma0(w2))));
+            t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
+            cVec = add(cVec, t2);
+            gVec = add(t1, t2);
+
+            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x0fc19dc6), inc(w2, sigma1(w0), w11, sigma0(w3))));
+            t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
+            bVec = add(bVec, t2);
+            fVec = add(t1, t2);
+
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x240ca1cc), inc(w3, sigma1(w1), w12, sigma0(w4))));
+            t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
+            aVec = add(aVec, t2);
+            eVec = add(t1, t2);
+
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x2de92c6f), inc(w4, sigma1(w2), w13, sigma0(w5))));
+            t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
+            hVec = add(hVec, t2);
+            dVec = add(t1, t2);
+
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x4a7484aa), inc(w5, sigma1(w3), w14, sigma0(w6))));
+            t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
+            gVec = add(gVec, t2);
+            cVec = add(t1, t2);
+
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x5cb0a9dc), inc(w6, sigma1(w4), w15, sigma0(w7))));
+            t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
+            fVec = add(fVec, t2);
+            bVec = add(t1, t2);
+
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x76f988da), inc(w7, sigma1(w5), w0, sigma0(w8))));
+            t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
+            eVec = add(eVec, t2);
+            aVec = add(t1, t2);
+
+            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x983e5152), inc(w8, sigma1(w6), w1, sigma0(w9))));
+            t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
+            dVec = add(dVec, t2);
+            hVec = add(t1, t2);
+
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0xa831c66d), inc(w9, sigma1(w7), w2, sigma0(w10))));
+            t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
+            cVec = add(cVec, t2);
+            gVec = add(t1, t2);
+
+            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0xb00327c8), inc(w10, sigma1(w8), w3, sigma0(w11))));
+            bVec = add(bVec, t2);
+            fVec = add(t1, t2);
+
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0xbf597fc7), inc(w11, sigma1(w9), w4, sigma0(w12))));
+            t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
+            aVec = add(aVec, t2);
+            eVec = add(t1, t2);
+
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0xc6e00bf3), inc(w12, sigma1(w10), w5, sigma0(w13))));
+            t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
+            hVec = add(hVec, t2);
+            dVec = add(t1, t2);
+
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0xd5a79147), inc(w13, sigma1(w11), w6, sigma0(w14))));
+            t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
+            gVec = add(gVec, t2);
+            cVec = add(t1, t2);
+
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x06ca6351), inc(w14, sigma1(w12), w7, sigma0(w15))));
+            t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
+            fVec = add(fVec, t2);
+            bVec = add(t1, t2);
+
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x14292967), inc(w15, sigma1(w13), w8, sigma0(w0))));
+            t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
+            eVec = add(eVec, t2);
+            aVec = add(t1, t2);
+
+            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x27b70a85), inc(w0, sigma1(w14), w9, sigma0(w1))));
+            t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
+            dVec = add(dVec, t2);
+            hVec = add(t1, t2);
+
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x2e1b2138), inc(w1, sigma1(w15), w10, sigma0(w2))));
+            t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
+            cVec = add(cVec, t2);
+            gVec = add(t1, t2);
+
+            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x4d2c6dfc), inc(w2, sigma1(w0), w11, sigma0(w3))));
+            t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
+            bVec = add(bVec, t2);
+            fVec = add(t1, t2);
+
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x53380d13), inc(w3, sigma1(w1), w12, sigma0(w4))));
+            t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
+            aVec = add(aVec, t2);
+            eVec = add(t1, t2);
+
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x650a7354), inc(w4, sigma1(w2), w13, sigma0(w5))));
+            t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
+            hVec = add(hVec, t2);
+            dVec = add(t1, t2);
+
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x766a0abb), inc(w5, sigma1(w3), w14, sigma0(w6))));
+            t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
+            gVec = add(gVec, t2);
+            cVec = add(t1, t2);
+
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x81c2c92e), inc(w6, sigma1(w4), w15, sigma0(w7))));
+            t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
+            fVec = add(fVec, t2);
+            bVec = add(t1, t2);
+
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x92722c85), inc(w7, sigma1(w5), w0, sigma0(w8))));
+            t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
+            eVec = add(eVec, t2);
+            aVec = add(t1, t2);
+
+            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0xa2bfe8a1), inc(w8, sigma1(w6), w1, sigma0(w9))));
+            t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
+            dVec = add(dVec, t2);
+            hVec = add(t1, t2);
+
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0xa81a664b), inc(w9, sigma1(w7), w2, sigma0(w10))));
+            t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
+            cVec = add(cVec, t2);
+            gVec = add(t1, t2);
+
+            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0xc24b8b70), inc(w10, sigma1(w8), w3, sigma0(w11))));
+            t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
+            bVec = add(bVec, t2);
+            fVec = add(t1, t2);
+
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0xc76c51a3), inc(w11, sigma1(w9), w4, sigma0(w12))));
+            t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
+            aVec = add(aVec, t2);
+            eVec = add(t1, t2);
+
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0xd192e819), inc(w12, sigma1(w10), w5, sigma0(w13))));
+            t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
+            hVec = add(hVec, t2);
+            dVec = add(t1, t2);
+
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0xd6990624), inc(w13, sigma1(w11), w6, sigma0(w14))));
+            t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
+            gVec = add(gVec, t2);
+            cVec = add(t1, t2);
+
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0xf40e3585), inc(w14, sigma1(w12), w7, sigma0(w15))));
+            t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
+            fVec = add(fVec, t2);
+            bVec = add(t1, t2);
+
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x106aa070), inc(w15, sigma1(w13), w8, sigma0(w0))));
+            t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
+            eVec = add(eVec, t2);
+            aVec = add(t1, t2);
+
+            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x19a4c116), inc(w0, sigma1(w14), w9, sigma0(w1))));
+            t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
+            dVec = add(dVec, t2);
+            hVec = add(t1, t2);
+
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x1e376c08), inc(w1, sigma1(w15), w10, sigma0(w2))));
+            t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
+            cVec = add(cVec, t2);
+            gVec = add(t1, t2);
+
+            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x2748774c), inc(w2, sigma1(w0), w11, sigma0(w3))));
+            t2  = add(Sigma0(gVec), maj(gVec, hVec, aVec));
+            bVec = add(bVec, t2);
+            fVec = add(t1, t2);
+
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x34b0bcb5), inc(w3, sigma1(w1), w12, sigma0(w4))));
+            t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
+            aVec = add(aVec, t2);
+            eVec = add(t1, t2);
+
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x391c0cb3), inc(w4, sigma1(w2), w13, sigma0(w5))));
+            t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
+            hVec = add(hVec, t2);
+            dVec = add(t1, t2);
+
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x4ed8aa4a), inc(w5, sigma1(w3), w14, sigma0(w6))));
+            t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
+            gVec = add(gVec, t2);
+            cVec = add(t1, t2);
+
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x5b9cca4f), inc(w6, sigma1(w4), w15, sigma0(w7))));
+            t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
+            fVec = add(fVec, t2);
+            bVec = add(t1, t2);
+
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x682e6ff3), inc(w7, sigma1(w5), w0, sigma0(w8))));
+            t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
+            eVec = add(eVec, t2);
+            aVec = add(t1, t2);
+
+            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x748f82ee), inc(w8, sigma1(w6), w1, sigma0(w9))));
+            t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
+            dVec = add(dVec, t2);
+            hVec = add(t1, t2);
+
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x78a5636f), inc(w9, sigma1(w7), w2, sigma0(w10))));
+            t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
+            cVec = add(cVec, t2);
+            gVec = add(t1, t2);
+
+            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x84c87814), inc(w10, sigma1(w8), w3, sigma0(w11))));
+            t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
+            bVec = add(bVec, t2);
+            fVec = add(t1, t2);
+
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x8cc70208), inc(w11, sigma1(w9), w4, sigma0(w12))));
+            t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
+            aVec = add(aVec, t2);
+            eVec = add(t1, t2);
+
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x90befffa), inc(w12, sigma1(w10), w5, sigma0(w13))));
+            t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
+            hVec = add(hVec, t2);
+            dVec = add(t1, t2);
+
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0xa4506ceb), inc(w13, sigma1(w11), w6, sigma0(w14))));
+            t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
+            gVec = add(gVec, t2);
+            cVec = add(t1, t2);
+
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0xbef9a3f7), inc(w14, sigma1(w12), w7, sigma0(w15))));
+            t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
+            fVec = add(fVec, t2);
+            bVec = add(t1, t2);
+
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0xc67178f2), inc(w15, sigma1(w13), w8, sigma0(w0))));
+            t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
+            eVec = add(eVec, t2);
+            aVec = add(t1, t2);
 
             aVec = add(aVec, IntVector.broadcast(species, H[0]));
             bVec = add(bVec, IntVector.broadcast(species, H[1]));
