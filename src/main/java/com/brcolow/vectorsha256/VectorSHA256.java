@@ -1,5 +1,6 @@
 package com.brcolow.vectorsha256;
 
+import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.IntVector;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorShuffle;
@@ -433,17 +434,24 @@ public class VectorSHA256 {
                     bytesToIntLE(chunk, 320 + offset),
                     bytesToIntLE(chunk, 384 + offset),
                     bytesToIntLE(chunk, 448 + offset)}, 0);
-            var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203, 0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203 }, 0);
+            System.out.println("read8 in: " + bytesToIntLE(chunk, 0 + offset) + ", " + bytesToIntLE(chunk, 64 + offset) +
+                    ", " + bytesToIntLE(chunk, 128 + offset) + ", " + bytesToIntLE(chunk, 192 + offset) + ", " +
+                    bytesToIntLE(chunk, 256 + offset) + ", " + bytesToIntLE(chunk, 320 + offset) + ", " +
+                    bytesToIntLE(chunk, 384 + offset) + ", " + bytesToIntLE(chunk, 448 + offset));
+            //var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203, 0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203 }, 0);
             /*
             var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3,
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3 }, 0);
+
              */
-            ret.rearrange(shuffle, shuffle.laneIsValid());
-            System.out.println("read8 returns: " + bytesToHex(ret.reinterpretAsBytes().toArray()));
-            return ret;
+            var shuffle = VectorShuffle.fromOp(ByteVector.SPECIES_256, (i -> ((8+i)%16)));
+            ByteVector shuffled = ret.reinterpretAsBytes().rearrange(shuffle, shuffle.laneIsValid());
+
+            System.out.println("read8 returns: " + ret);
+            return IntVector.fromByteArray(SPECIES_256, shuffled.toArray(), 0, ByteOrder.LITTLE_ENDIAN);
         }
 
         void write4(byte[] out, int offset, IntVector v) {
@@ -466,7 +474,7 @@ public class VectorSHA256 {
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3 }, 0);
              */
-            v.rearrange(shuffle, shuffle.laneIsValid());
+            v = v.rearrange(shuffle, shuffle.laneIsValid());
             System.arraycopy(intToBytesLE(v.lane(7)), 0, out, 0 + offset, 4);
             System.arraycopy(intToBytesLE(v.lane(6)), 0, out, 32 + offset, 4);
             System.arraycopy(intToBytesLE(v.lane(5)), 0, out, 64 + offset, 4);
