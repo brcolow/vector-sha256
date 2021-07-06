@@ -466,7 +466,7 @@ public class VectorSHA256 {
         }
 
         void write8(byte[] out, int offset, IntVector v) {
-            var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203, 0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203 }, 0);
+            // var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203, 0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203 }, 0);
             /*
             var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{
                     12,13,14,15,   8, 9,10,11,
@@ -474,7 +474,8 @@ public class VectorSHA256 {
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3 }, 0);
              */
-            v = v.rearrange(shuffle, shuffle.laneIsValid());
+            var shuffle = VectorShuffle.fromOp(ByteVector.SPECIES_256, (i -> ((8+i)%16)));
+            ByteVector shuffled = v.reinterpretAsBytes().rearrange(shuffle, shuffle.laneIsValid());
             System.arraycopy(intToBytesLE(v.lane(7)), 0, out, 0 + offset, 4);
             System.arraycopy(intToBytesLE(v.lane(6)), 0, out, 32 + offset, 4);
             System.arraycopy(intToBytesLE(v.lane(5)), 0, out, 64 + offset, 4);
