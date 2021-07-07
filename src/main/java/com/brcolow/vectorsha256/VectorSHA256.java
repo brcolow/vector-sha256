@@ -27,6 +27,7 @@ import java.util.function.BiFunction;
  * https://github.com/patrykwnosuch/cpuminer-nosuch/blob/f5d602ea58b12352bdd341df06422c21b4ad7cd2/algo/sha/sha2-hash-4way.c#L440
  *
  * Intel paper about multi-buffer SHA2:
+ * https://www.intel.com/content/dam/www/public/us/en/documents/white-papers/sha-256-implementations-paper.pdf
  * https://www.intel.com/content/dam/www/public/us/en/documents/white-papers/communications-ia-multi-buffer-paper.pdf
  */
 public class VectorSHA256 {
@@ -76,7 +77,7 @@ public class VectorSHA256 {
     public static class Sha256Digest {
         private int[] H;
         // buffer to store partial blocks, up to 64 bytes large
-        byte[] buffer;
+        private byte[] buffer;
         // offset into buffer
         private int bufOfs;
         // size of the input to the compression function (transform) in bytes
@@ -86,7 +87,7 @@ public class VectorSHA256 {
         private final int blockSize =   64;
         // length of the message digest in bytes
         private final int digestLength = 32;
-        long bytesProcessed;
+        private long bytesProcessed;
         static final byte[] padding;
 
         static {
@@ -106,17 +107,6 @@ public class VectorSHA256 {
             static final VarHandle INT_ARRAY
                     = MethodHandles.byteArrayViewVarHandle(int[].class,
                     ByteOrder.LITTLE_ENDIAN).withInvokeExactBehavior();
-        }
-
-        /**
-         * byte[] to int[] conversion, little endian byte order.
-         */
-        static void b2iLittle(byte[] in, int inOfs, int[] out, int outOfs, int len) {
-            len += inOfs;
-            while (inOfs < len) {
-                out[outOfs++] = (int) LE.INT_ARRAY.get(in, inOfs);
-                inOfs += 4;
-            }
         }
 
         private static final int[] INITIAL_HASHES = {
@@ -438,20 +428,20 @@ public class VectorSHA256 {
                     ", " + bytesToIntLE(chunk, 128 + offset) + ", " + bytesToIntLE(chunk, 192 + offset) + ", " +
                     bytesToIntLE(chunk, 256 + offset) + ", " + bytesToIntLE(chunk, 320 + offset) + ", " +
                     bytesToIntLE(chunk, 384 + offset) + ", " + bytesToIntLE(chunk, 448 + offset));
-            //var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203, 0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203 }, 0);
             /*
-            var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{
+            var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203, 0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203 }, 0);
+             */
+            var shuffle = VectorShuffle.fromArray(ByteVector.SPECIES_256, new int[]{
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3,
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3 }, 0);
 
-             */
-            var shuffle = VectorShuffle.fromOp(ByteVector.SPECIES_256, (i -> ((8+i)%16)));
+            // var shuffle = VectorShuffle.fromOp(ByteVector.SPECIES_256, (i -> ((8 + i) % 16)));
             ByteVector shuffled = ret.reinterpretAsBytes().rearrange(shuffle, shuffle.laneIsValid());
 
-            System.out.println("read8 returns: " + ret);
-            return IntVector.fromByteArray(SPECIES_256, shuffled.toArray(), 0, ByteOrder.LITTLE_ENDIAN);
+            System.out.println("read8 after shuffle: " + IntVector.fromByteArray(SPECIES_256, shuffled.toArray(), 0, ByteOrder.BIG_ENDIAN));
+            return IntVector.fromByteArray(SPECIES_256, shuffled.toArray(), 0, ByteOrder.BIG_ENDIAN);
         }
 
         void write4(byte[] out, int offset, IntVector v) {
@@ -1286,7 +1276,7 @@ public class VectorSHA256 {
             <MacGyver> That does look rather odd, yes, but it looks like it's computing 8 hashes vectorized.
             <MacGyver> The result after those 8 calls to Write8 is 8 hashes back-to-back in out.
              */
-            // FIXME: Instead of writing to hashes we can just set H from the bytes the last hash (h?)
+            // FIXME: Instead of writing to hashes we can just set H from the bytes the last hash (H[7])
             H[0] = bytesToIntLE(hashes, 224);
             H[1] = bytesToIntLE(hashes, 228);
             H[2] = bytesToIntLE(hashes, 232);
