@@ -464,24 +464,29 @@ public class VectorSHA256 {
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3 }, 0);
              */
-            var shuffle = VectorShuffle.fromOp(ByteVector.SPECIES_256, (i -> ((8+i)%16)));
+            var shuffle = VectorShuffle.fromArray(ByteVector.SPECIES_256, new int[]{
+                    12,13,14,15,   8, 9,10,11,
+                    4, 5, 6, 7,    0, 1, 2, 3,
+                    12,13,14,15,   8, 9,10,11,
+                    4, 5, 6, 7,    0, 1, 2, 3 }, 0);
             ByteVector shuffled = v.reinterpretAsBytes().rearrange(shuffle, shuffle.laneIsValid());
-            System.arraycopy(intToBytesLE(v.lane(7)), 0, out, 0 + offset, 4);
-            System.arraycopy(intToBytesLE(v.lane(6)), 0, out, 32 + offset, 4);
-            System.arraycopy(intToBytesLE(v.lane(5)), 0, out, 64 + offset, 4);
-            System.arraycopy(intToBytesLE(v.lane(4)), 0, out, 96 + offset, 4);
-            System.arraycopy(intToBytesLE(v.lane(3)), 0, out, 128 + offset, 4);
-            System.arraycopy(intToBytesLE(v.lane(2)), 0, out, 160 + offset, 4);
-            System.arraycopy(intToBytesLE(v.lane(1)), 0, out, 192 + offset, 4);
-            System.arraycopy(intToBytesLE(v.lane(0)), 0, out, 224 + offset, 4);
-            System.out.println("Lane 7: " + v.lane(7));
-            System.out.println("Lane 6: " + v.lane(6));
-            System.out.println("Lane 5: " + v.lane(5));
-            System.out.println("Lane 4: " + v.lane(4));
-            System.out.println("Lane 3: " + v.lane(3));
-            System.out.println("Lane 2: " + v.lane(2));
-            System.out.println("Lane 1: " + v.lane(1));
-            System.out.println("Lane 10: " + v.lane(0));
+            IntVector shuffledInt = IntVector.fromByteArray(SPECIES_256, shuffled.toArray(), 0, ByteOrder.LITTLE_ENDIAN);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(7)), 0, out, 0 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(6)), 0, out, 32 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(5)), 0, out, 64 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(4)), 0, out, 96 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(3)), 0, out, 128 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(2)), 0, out, 160 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(1)), 0, out, 192 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(0)), 0, out, 224 + offset, 4);
+            System.out.println("Lane 7: " + shuffledInt.lane(7));
+            System.out.println("Lane 6: " + shuffledInt.lane(6));
+            System.out.println("Lane 5: " + shuffledInt.lane(5));
+            System.out.println("Lane 4: " + shuffledInt.lane(4));
+            System.out.println("Lane 3: " + shuffledInt.lane(3));
+            System.out.println("Lane 2: " + shuffledInt.lane(2));
+            System.out.println("Lane 1: " + shuffledInt.lane(1));
+            System.out.println("Lane 0: " + shuffledInt.lane(0));
             System.out.println("out: " + bytesToHex(out));
         }
 
@@ -886,349 +891,534 @@ public class VectorSHA256 {
             IntVector gVec = IntVector.broadcast(species, H[6]);
             IntVector hVec = IntVector.broadcast(species, H[7]);
 
-            System.out.println("aVec: " + aVec);
-            System.out.println("bVec: " + bVec);
-            System.out.println("cVec: " + cVec);
-            System.out.println("dVec: " + dVec);
-            System.out.println("eVec: " + eVec);
-            System.out.println("fVec: " + fVec);
-            System.out.println("gVec: " + gVec);
-            System.out.println("hVec: " + hVec);
-
             IntVector w0 = readFunc.apply(in, 0);
-            System.out.println("W[0]" + w0);
             IntVector t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x428a2f98), w0));
             IntVector t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
-            dVec = add(dVec, t2);
+            System.out.println("After round 0");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
             IntVector w1 = readFunc.apply(in, 4);
-            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, hVec), add(IntVector.broadcast(species, 0x71374491), w1));
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x71374491), w1));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
-            cVec = add(cVec, t2);
+            System.out.println("After round 1");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
             IntVector w2 = readFunc.apply(in, 8);
             t1= add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0xb5c0fbcf), w2));
             t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
-            bVec = add(bVec, t2);
+            System.out.println("After round 2");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
             IntVector w3 = readFunc.apply(in, 12);
             t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0xe9b5dba5), w3));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
-            aVec = add(aVec, t2);
+            System.out.println("After round 3");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            aVec = add(aVec, t1);
             eVec = add(t1, t2);
 
             IntVector w4 = readFunc.apply(in, 16);
             t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x3956c25b), w4));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
-            hVec = add(hVec, t2);
+            System.out.println("After round 4");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            hVec = add(hVec, t1);
             dVec = add(t1, t2);
 
             IntVector w5 = readFunc.apply(in, 20);
             t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x59f111f1), w5));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
-            gVec = add(gVec, t2);
+            System.out.println("After round 5");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
             IntVector w6 = readFunc.apply(in, 24);
             t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x923f82a4), w6));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
-            fVec = add(fVec, t2);
+            System.out.println("After round 6");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
             IntVector w7 = readFunc.apply(in, 28);
             t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0xab1c5ed5), w7));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
-            eVec = add(eVec, t2);
+            System.out.println("After round 7");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
             IntVector w8 = readFunc.apply(in, 32);
             t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0xd807aa98), w8));
             t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
-            dVec = add(dVec, t2);
+            System.out.println("After round 8");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
             IntVector w9 = readFunc.apply(in, 36);
             t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x12835b01), w9));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
-            cVec = add(cVec, t2);
+            System.out.println("After round 9");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
             IntVector w10 = readFunc.apply(in, 40);
             t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x243185be), w10));
             t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
-            bVec = add(bVec, t2);
+            System.out.println("After round 10");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
             IntVector w11 = readFunc.apply(in, 44);
             t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x550c7dc3), w11));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
-            aVec = add(aVec, t2);
+            System.out.println("After round 11");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            aVec = add(aVec, t1);
             eVec = add(t1, t2);
 
             IntVector w12 = readFunc.apply(in, 48);
             t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x72be5d74), w12));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
-            hVec = add(hVec, t2);
+            System.out.println("After round 12");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            hVec = add(hVec, t1);
             dVec = add(t1, t2);
 
             IntVector w13 = readFunc.apply(in, 52);
             t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x80deb1fe), w13));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
-            gVec = add(gVec, t2);
+            System.out.println("After round 13");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
             IntVector w14 = readFunc.apply(in, 56);
             t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x9bdc06a7), w14));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
-            fVec = add(fVec, t2);
+            System.out.println("After round 14");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
             IntVector w15 = readFunc.apply(in, 60);
             t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0xc19bf174), w15));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
-            eVec = add(eVec, t2);
+            System.out.println("After round 15");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
             t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0xe49b69c1), inc(w0, sigma1(w14), w9, sigma0(w1))));
             t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
-            dVec = add(dVec, t2);
+            System.out.println("After round 16");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
             t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0xefbe4786), inc(w1, sigma1(w15), w10, sigma0(w2))));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
-            cVec = add(cVec, t2);
+            System.out.println("After round 17");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
+            //     Round(g, h, a, b, c, d, e, f, Add(K(0x0fc19dc6ul), Inc(w2, sigma1(w0), w11, sigma0(w3))));
             t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x0fc19dc6), inc(w2, sigma1(w0), w11, sigma0(w3))));
             t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
-            bVec = add(bVec, t2);
+            System.out.println("After round 18");
+            System.out.println("GOOD UP TO HERE!!!! t1 is wrong, t2 is right");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
             t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x240ca1cc), inc(w3, sigma1(w1), w12, sigma0(w4))));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
-            aVec = add(aVec, t2);
-            eVec = add(t1, t2);
+            System.out.println("After round 19");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            aVec = add(aVec, t1);
+            eVec = add(t1, t1);
 
             t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x2de92c6f), inc(w4, sigma1(w2), w13, sigma0(w5))));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
-            hVec = add(hVec, t2);
+            System.out.println("After round 20");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            hVec = add(hVec, t1);
             dVec = add(t1, t2);
 
             t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x4a7484aa), inc(w5, sigma1(w3), w14, sigma0(w6))));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
-            gVec = add(gVec, t2);
+            System.out.println("After round 22");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
             t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x5cb0a9dc), inc(w6, sigma1(w4), w15, sigma0(w7))));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
-            fVec = add(fVec, t2);
+            System.out.println("After round 23");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
             t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x76f988da), inc(w7, sigma1(w5), w0, sigma0(w8))));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
-            eVec = add(eVec, t2);
+            System.out.println("After round 24");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
             t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x983e5152), inc(w8, sigma1(w6), w1, sigma0(w9))));
             t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
-            dVec = add(dVec, t2);
+            System.out.println("After round 25");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
             t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0xa831c66d), inc(w9, sigma1(w7), w2, sigma0(w10))));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
-            cVec = add(cVec, t2);
+            System.out.println("After round 26");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
             t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0xb00327c8), inc(w10, sigma1(w8), w3, sigma0(w11))));
-            bVec = add(bVec, t2);
+            t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
+            System.out.println("After round 27");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
             t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0xbf597fc7), inc(w11, sigma1(w9), w4, sigma0(w12))));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
-            aVec = add(aVec, t2);
+            System.out.println("After round 28");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            aVec = add(aVec, t1);
             eVec = add(t1, t2);
 
             t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0xc6e00bf3), inc(w12, sigma1(w10), w5, sigma0(w13))));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
-            hVec = add(hVec, t2);
+            System.out.println("After round 29");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            hVec = add(hVec, t1);
             dVec = add(t1, t2);
 
             t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0xd5a79147), inc(w13, sigma1(w11), w6, sigma0(w14))));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
-            gVec = add(gVec, t2);
+            System.out.println("After round 30");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
             t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x06ca6351), inc(w14, sigma1(w12), w7, sigma0(w15))));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
-            fVec = add(fVec, t2);
+            System.out.println("After round 31");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
             t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x14292967), inc(w15, sigma1(w13), w8, sigma0(w0))));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
-            eVec = add(eVec, t2);
+            System.out.println("After round 32");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
             t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x27b70a85), inc(w0, sigma1(w14), w9, sigma0(w1))));
             t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
-            dVec = add(dVec, t2);
+            System.out.println("After round 33");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
             t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x2e1b2138), inc(w1, sigma1(w15), w10, sigma0(w2))));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
-            cVec = add(cVec, t2);
+            System.out.println("After round 34");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
             t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x4d2c6dfc), inc(w2, sigma1(w0), w11, sigma0(w3))));
             t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
-            bVec = add(bVec, t2);
+            System.out.println("After round 35");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
             t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x53380d13), inc(w3, sigma1(w1), w12, sigma0(w4))));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
-            aVec = add(aVec, t2);
+            System.out.println("After round 36");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            aVec = add(aVec, t1);
             eVec = add(t1, t2);
 
             t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x650a7354), inc(w4, sigma1(w2), w13, sigma0(w5))));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
-            hVec = add(hVec, t2);
+            System.out.println("After round 37");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            hVec = add(hVec, t1);
             dVec = add(t1, t2);
 
             t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x766a0abb), inc(w5, sigma1(w3), w14, sigma0(w6))));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
-            gVec = add(gVec, t2);
+            System.out.println("After round 38");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
             t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x81c2c92e), inc(w6, sigma1(w4), w15, sigma0(w7))));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
-            fVec = add(fVec, t2);
+            System.out.println("After round 39");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
             t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x92722c85), inc(w7, sigma1(w5), w0, sigma0(w8))));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
-            eVec = add(eVec, t2);
+            System.out.println("After round 40");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
             t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0xa2bfe8a1), inc(w8, sigma1(w6), w1, sigma0(w9))));
             t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
-            dVec = add(dVec, t2);
+            System.out.println("After round 41");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
             t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0xa81a664b), inc(w9, sigma1(w7), w2, sigma0(w10))));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
-            cVec = add(cVec, t2);
+            System.out.println("After round 42");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
             t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0xc24b8b70), inc(w10, sigma1(w8), w3, sigma0(w11))));
             t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
-            bVec = add(bVec, t2);
+            System.out.println("After round 43");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
             t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0xc76c51a3), inc(w11, sigma1(w9), w4, sigma0(w12))));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
-            aVec = add(aVec, t2);
+            System.out.println("After round 44");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            aVec = add(aVec, t1);
             eVec = add(t1, t2);
 
             t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0xd192e819), inc(w12, sigma1(w10), w5, sigma0(w13))));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
-            hVec = add(hVec, t2);
+            System.out.println("After round 45");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            hVec = add(hVec, t1);
             dVec = add(t1, t2);
 
             t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0xd6990624), inc(w13, sigma1(w11), w6, sigma0(w14))));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
-            gVec = add(gVec, t2);
+            System.out.println("After round 46");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
             t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0xf40e3585), inc(w14, sigma1(w12), w7, sigma0(w15))));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
-            fVec = add(fVec, t2);
+            System.out.println("After round 47");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
             t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x106aa070), inc(w15, sigma1(w13), w8, sigma0(w0))));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
-            eVec = add(eVec, t2);
+            System.out.println("After round 48");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
             t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x19a4c116), inc(w0, sigma1(w14), w9, sigma0(w1))));
             t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
-            dVec = add(dVec, t2);
+            System.out.println("After round 49");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
             t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x1e376c08), inc(w1, sigma1(w15), w10, sigma0(w2))));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
-            cVec = add(cVec, t2);
+            System.out.println("After round 50");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
             t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x2748774c), inc(w2, sigma1(w0), w11, sigma0(w3))));
             t2  = add(Sigma0(gVec), maj(gVec, hVec, aVec));
-            bVec = add(bVec, t2);
+            System.out.println("After round 51");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
             t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x34b0bcb5), inc(w3, sigma1(w1), w12, sigma0(w4))));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
-            aVec = add(aVec, t2);
+            System.out.println("After round 52");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            aVec = add(aVec, t1);
             eVec = add(t1, t2);
 
             t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x391c0cb3), inc(w4, sigma1(w2), w13, sigma0(w5))));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
-            hVec = add(hVec, t2);
+            System.out.println("After round 53");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            hVec = add(hVec, t1);
             dVec = add(t1, t2);
 
             t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x4ed8aa4a), inc(w5, sigma1(w3), w14, sigma0(w6))));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
-            gVec = add(gVec, t2);
+            System.out.println("After round 54");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
             t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x5b9cca4f), inc(w6, sigma1(w4), w15, sigma0(w7))));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
-            fVec = add(fVec, t2);
+            System.out.println("After round 55");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
             t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x682e6ff3), inc(w7, sigma1(w5), w0, sigma0(w8))));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
-            eVec = add(eVec, t2);
+            System.out.println("After round 56");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
             t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x748f82ee), inc(w8, sigma1(w6), w1, sigma0(w9))));
             t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
-            dVec = add(dVec, t2);
+            System.out.println("After round 57");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
             t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x78a5636f), inc(w9, sigma1(w7), w2, sigma0(w10))));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
-            cVec = add(cVec, t2);
+            System.out.println("After round 58");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
             t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x84c87814), inc(w10, sigma1(w8), w3, sigma0(w11))));
             t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
-            bVec = add(bVec, t2);
+            System.out.println("After round 59");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
             t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x8cc70208), inc(w11, sigma1(w9), w4, sigma0(w12))));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
-            aVec = add(aVec, t2);
+            System.out.println("After round 60");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            aVec = add(aVec, t1);
             eVec = add(t1, t2);
 
             t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x90befffa), inc(w12, sigma1(w10), w5, sigma0(w13))));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
-            hVec = add(hVec, t2);
+            System.out.println("After round 61");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            hVec = add(hVec, t1);
             dVec = add(t1, t2);
 
             t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0xa4506ceb), inc(w13, sigma1(w11), w6, sigma0(w14))));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
-            gVec = add(gVec, t2);
+            System.out.println("After round 62");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
             t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0xbef9a3f7), inc(w14, sigma1(w12), w7, sigma0(w15))));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
-            fVec = add(fVec, t2);
+            System.out.println("After round 63");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
             t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0xc67178f2), inc(w15, sigma1(w13), w8, sigma0(w0))));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
-            eVec = add(eVec, t2);
+            System.out.println("After round 64");
+            System.out.println("t1 = " + t1);
+            System.out.println("t2 = " + t2);
+            eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
             aVec = add(aVec, IntVector.broadcast(species, H[0]));
