@@ -428,18 +428,12 @@ public class VectorSHA256 {
                     ", " + bytesToIntLE(chunk, 128 + offset) + ", " + bytesToIntLE(chunk, 192 + offset) + ", " +
                     bytesToIntLE(chunk, 256 + offset) + ", " + bytesToIntLE(chunk, 320 + offset) + ", " +
                     bytesToIntLE(chunk, 384 + offset) + ", " + bytesToIntLE(chunk, 448 + offset));
-            /*
-            var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203, 0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203 }, 0);
-             */
             var shuffle = VectorShuffle.fromArray(ByteVector.SPECIES_256, new int[]{
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3,
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3 }, 0);
-
-            // var shuffle = VectorShuffle.fromOp(ByteVector.SPECIES_256, (i -> ((8 + i) % 16)));
             ByteVector shuffled = ret.reinterpretAsBytes().rearrange(shuffle, shuffle.laneIsValid());
-
             System.out.println("read8 after shuffle: " + IntVector.fromByteArray(SPECIES_256, shuffled.toArray(), 0, ByteOrder.BIG_ENDIAN));
             return IntVector.fromByteArray(SPECIES_256, shuffled.toArray(), 0, ByteOrder.BIG_ENDIAN);
         }
@@ -456,37 +450,25 @@ public class VectorSHA256 {
         }
 
         void write8(byte[] out, int offset, IntVector v) {
-            // var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203, 0x0C0D0E0F, 0x08090A0B, 0x04050607, 0x00010203 }, 0);
-            /*
-            var shuffle = VectorShuffle.fromArray(SPECIES_256, new int[]{
-                    12,13,14,15,   8, 9,10,11,
-                    4, 5, 6, 7,    0, 1, 2, 3,
-                    12,13,14,15,   8, 9,10,11,
-                    4, 5, 6, 7,    0, 1, 2, 3 }, 0);
-             */
+            System.out.println("write8, offset: " + offset);
             var shuffle = VectorShuffle.fromArray(ByteVector.SPECIES_256, new int[]{
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3,
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3 }, 0);
             ByteVector shuffled = v.reinterpretAsBytes().rearrange(shuffle, shuffle.laneIsValid());
-            IntVector shuffledInt = IntVector.fromByteArray(SPECIES_256, shuffled.toArray(), 0, ByteOrder.LITTLE_ENDIAN);
-            System.arraycopy(intToBytesLE(shuffledInt.lane(7)), 0, out, 0 + offset, 4);
-            System.arraycopy(intToBytesLE(shuffledInt.lane(6)), 0, out, 32 + offset, 4);
-            System.arraycopy(intToBytesLE(shuffledInt.lane(5)), 0, out, 64 + offset, 4);
-            System.arraycopy(intToBytesLE(shuffledInt.lane(4)), 0, out, 96 + offset, 4);
-            System.arraycopy(intToBytesLE(shuffledInt.lane(3)), 0, out, 128 + offset, 4);
-            System.arraycopy(intToBytesLE(shuffledInt.lane(2)), 0, out, 160 + offset, 4);
-            System.arraycopy(intToBytesLE(shuffledInt.lane(1)), 0, out, 192 + offset, 4);
-            System.arraycopy(intToBytesLE(shuffledInt.lane(0)), 0, out, 224 + offset, 4);
-            System.out.println("Lane 7: " + shuffledInt.lane(7));
-            System.out.println("Lane 6: " + shuffledInt.lane(6));
-            System.out.println("Lane 5: " + shuffledInt.lane(5));
-            System.out.println("Lane 4: " + shuffledInt.lane(4));
-            System.out.println("Lane 3: " + shuffledInt.lane(3));
-            System.out.println("Lane 2: " + shuffledInt.lane(2));
-            System.out.println("Lane 1: " + shuffledInt.lane(1));
-            System.out.println("Lane 0: " + shuffledInt.lane(0));
+            IntVector shuffledInt = IntVector.fromByteArray(SPECIES_256, shuffled.toArray(), 0, ByteOrder.BIG_ENDIAN);
+            System.out.println("shuffledInt: " + shuffledInt);
+            System.out.println("lane 0:" + shuffledInt.lane(0));
+            System.out.println("Writing byte in first open position: " + bytesToHex(intToBytesLE(shuffledInt.lane(0))));
+            System.arraycopy(intToBytesLE(shuffledInt.lane(0)), 0, out, 0 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(1)), 0, out, 32 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(2)), 0, out, 64 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(3)), 0, out, 96 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(4)), 0, out, 128 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(5)), 0, out, 160 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(6)), 0, out, 192 + offset, 4);
+            System.arraycopy(intToBytesLE(shuffledInt.lane(7)), 0, out, 224 + offset, 4);
             System.out.println("out: " + bytesToHex(out));
         }
 
@@ -1035,7 +1017,7 @@ public class VectorSHA256 {
             eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
-            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0xe49b69c1), inc(w0, sigma1(w14), w9, sigma0(w1))));
+            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0xe49b69c1), w0 = inc(w0, sigma1(w14), w9, sigma0(w1))));
             t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
             System.out.println("After round 16");
             System.out.println("t1 = " + t1);
@@ -1043,7 +1025,7 @@ public class VectorSHA256 {
             dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
-            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0xefbe4786), inc(w1, sigma1(w15), w10, sigma0(w2))));
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0xefbe4786), w1 = inc(w1, sigma1(w15), w10, sigma0(w2))));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
             System.out.println("After round 17");
             System.out.println("t1 = " + t1);
@@ -1051,33 +1033,52 @@ public class VectorSHA256 {
             cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
-            //     Round(g, h, a, b, c, d, e, f, Add(K(0x0fc19dc6ul), Inc(w2, sigma1(w0), w11, sigma0(w3))));
-            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x0fc19dc6), inc(w2, sigma1(w0), w11, sigma0(w3))));
+            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x0fc19dc6), w2 = inc(w2, sigma1(w0), w11, sigma0(w3))));
             t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
             System.out.println("After round 18");
-            System.out.println("GOOD UP TO HERE!!!! t1 is wrong, t2 is right");
             System.out.println("t1 = " + t1);
             System.out.println("t2 = " + t2);
             bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
-            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x240ca1cc), inc(w3, sigma1(w1), w12, sigma0(w4))));
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x240ca1cc), w3 = inc(w3, sigma1(w1), w12, sigma0(w4))));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
             System.out.println("After round 19");
             System.out.println("t1 = " + t1);
             System.out.println("t2 = " + t2);
             aVec = add(aVec, t1);
-            eVec = add(t1, t1);
+            eVec = add(t1, t2);
 
-            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x2de92c6f), inc(w4, sigma1(w2), w13, sigma0(w5))));
+            System.out.println("a: " + aVec);
+            System.out.println("b: " + bVec);
+            System.out.println("c: " + cVec);
+            System.out.println("d: " + dVec);
+            // e is wrong!
+            System.out.println("e: " + eVec);
+            System.out.println("f: " + fVec);
+            System.out.println("g: " + gVec);
+            System.out.println("h: " + hVec);
+            System.out.println("w4: " + w4);
+            System.out.println("w2: " + w2);
+            System.out.println("w13: " + w13);
+            System.out.println("w5: " + w5);
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x2de92c6f), w4 = inc(w4, sigma1(w2), w13, sigma0(w5))));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
             System.out.println("After round 20");
             System.out.println("t1 = " + t1);
             System.out.println("t2 = " + t2);
             hVec = add(hVec, t1);
             dVec = add(t1, t2);
+            System.out.println("a: " + aVec);
+            System.out.println("b: " + bVec);
+            System.out.println("c: " + cVec);
+            System.out.println("d: " + dVec);
+            System.out.println("e: " + eVec);
+            System.out.println("f: " + fVec);
+            System.out.println("g: " + gVec);
+            System.out.println("h: " + hVec);
 
-            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x4a7484aa), inc(w5, sigma1(w3), w14, sigma0(w6))));
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x4a7484aa), w5 = inc(w5, sigma1(w3), w14, sigma0(w6))));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
             System.out.println("After round 22");
             System.out.println("t1 = " + t1);
@@ -1085,7 +1086,7 @@ public class VectorSHA256 {
             gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
-            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x5cb0a9dc), inc(w6, sigma1(w4), w15, sigma0(w7))));
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x5cb0a9dc), w6 = inc(w6, sigma1(w4), w15, sigma0(w7))));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
             System.out.println("After round 23");
             System.out.println("t1 = " + t1);
@@ -1093,7 +1094,7 @@ public class VectorSHA256 {
             fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
-            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x76f988da), inc(w7, sigma1(w5), w0, sigma0(w8))));
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x76f988da), w7 = inc(w7, sigma1(w5), w0, sigma0(w8))));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
             System.out.println("After round 24");
             System.out.println("t1 = " + t1);
@@ -1101,7 +1102,7 @@ public class VectorSHA256 {
             eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
-            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x983e5152), inc(w8, sigma1(w6), w1, sigma0(w9))));
+            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x983e5152), w8 = inc(w8, sigma1(w6), w1, sigma0(w9))));
             t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
             System.out.println("After round 25");
             System.out.println("t1 = " + t1);
@@ -1109,7 +1110,7 @@ public class VectorSHA256 {
             dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
-            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0xa831c66d), inc(w9, sigma1(w7), w2, sigma0(w10))));
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0xa831c66d), w9 = inc(w9, sigma1(w7), w2, sigma0(w10))));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
             System.out.println("After round 26");
             System.out.println("t1 = " + t1);
@@ -1117,7 +1118,7 @@ public class VectorSHA256 {
             cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
-            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0xb00327c8), inc(w10, sigma1(w8), w3, sigma0(w11))));
+            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0xb00327c8), w10 = inc(w10, sigma1(w8), w3, sigma0(w11))));
             t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
             System.out.println("After round 27");
             System.out.println("t1 = " + t1);
@@ -1125,7 +1126,7 @@ public class VectorSHA256 {
             bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
-            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0xbf597fc7), inc(w11, sigma1(w9), w4, sigma0(w12))));
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0xbf597fc7), w11 = inc(w11, sigma1(w9), w4, sigma0(w12))));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
             System.out.println("After round 28");
             System.out.println("t1 = " + t1);
@@ -1133,7 +1134,7 @@ public class VectorSHA256 {
             aVec = add(aVec, t1);
             eVec = add(t1, t2);
 
-            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0xc6e00bf3), inc(w12, sigma1(w10), w5, sigma0(w13))));
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0xc6e00bf3), w12 = inc(w12, sigma1(w10), w5, sigma0(w13))));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
             System.out.println("After round 29");
             System.out.println("t1 = " + t1);
@@ -1141,7 +1142,7 @@ public class VectorSHA256 {
             hVec = add(hVec, t1);
             dVec = add(t1, t2);
 
-            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0xd5a79147), inc(w13, sigma1(w11), w6, sigma0(w14))));
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0xd5a79147), w13 = inc(w13, sigma1(w11), w6, sigma0(w14))));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
             System.out.println("After round 30");
             System.out.println("t1 = " + t1);
@@ -1149,7 +1150,7 @@ public class VectorSHA256 {
             gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
-            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x06ca6351), inc(w14, sigma1(w12), w7, sigma0(w15))));
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x06ca6351), w14 = inc(w14, sigma1(w12), w7, sigma0(w15))));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
             System.out.println("After round 31");
             System.out.println("t1 = " + t1);
@@ -1157,7 +1158,7 @@ public class VectorSHA256 {
             fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
-            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x14292967), inc(w15, sigma1(w13), w8, sigma0(w0))));
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x14292967), w15 = inc(w15, sigma1(w13), w8, sigma0(w0))));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
             System.out.println("After round 32");
             System.out.println("t1 = " + t1);
@@ -1165,7 +1166,7 @@ public class VectorSHA256 {
             eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
-            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x27b70a85), inc(w0, sigma1(w14), w9, sigma0(w1))));
+            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x27b70a85), w0 = inc(w0, sigma1(w14), w9, sigma0(w1))));
             t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
             System.out.println("After round 33");
             System.out.println("t1 = " + t1);
@@ -1173,7 +1174,7 @@ public class VectorSHA256 {
             dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
-            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x2e1b2138), inc(w1, sigma1(w15), w10, sigma0(w2))));
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x2e1b2138), w1 = inc(w1, sigma1(w15), w10, sigma0(w2))));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
             System.out.println("After round 34");
             System.out.println("t1 = " + t1);
@@ -1181,7 +1182,7 @@ public class VectorSHA256 {
             cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
-            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x4d2c6dfc), inc(w2, sigma1(w0), w11, sigma0(w3))));
+            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x4d2c6dfc), w2 = inc(w2, sigma1(w0), w11, sigma0(w3))));
             t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
             System.out.println("After round 35");
             System.out.println("t1 = " + t1);
@@ -1189,7 +1190,7 @@ public class VectorSHA256 {
             bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
-            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x53380d13), inc(w3, sigma1(w1), w12, sigma0(w4))));
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x53380d13), w3 = inc(w3, sigma1(w1), w12, sigma0(w4))));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
             System.out.println("After round 36");
             System.out.println("t1 = " + t1);
@@ -1197,7 +1198,7 @@ public class VectorSHA256 {
             aVec = add(aVec, t1);
             eVec = add(t1, t2);
 
-            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x650a7354), inc(w4, sigma1(w2), w13, sigma0(w5))));
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x650a7354), w4 = inc(w4, sigma1(w2), w13, sigma0(w5))));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
             System.out.println("After round 37");
             System.out.println("t1 = " + t1);
@@ -1205,7 +1206,7 @@ public class VectorSHA256 {
             hVec = add(hVec, t1);
             dVec = add(t1, t2);
 
-            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x766a0abb), inc(w5, sigma1(w3), w14, sigma0(w6))));
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x766a0abb), w5 = inc(w5, sigma1(w3), w14, sigma0(w6))));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
             System.out.println("After round 38");
             System.out.println("t1 = " + t1);
@@ -1213,7 +1214,7 @@ public class VectorSHA256 {
             gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
-            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x81c2c92e), inc(w6, sigma1(w4), w15, sigma0(w7))));
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x81c2c92e), w6 = inc(w6, sigma1(w4), w15, sigma0(w7))));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
             System.out.println("After round 39");
             System.out.println("t1 = " + t1);
@@ -1221,7 +1222,7 @@ public class VectorSHA256 {
             fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
-            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x92722c85), inc(w7, sigma1(w5), w0, sigma0(w8))));
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x92722c85), w7 = inc(w7, sigma1(w5), w0, sigma0(w8))));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
             System.out.println("After round 40");
             System.out.println("t1 = " + t1);
@@ -1229,7 +1230,7 @@ public class VectorSHA256 {
             eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
-            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0xa2bfe8a1), inc(w8, sigma1(w6), w1, sigma0(w9))));
+            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0xa2bfe8a1), w8 = inc(w8, sigma1(w6), w1, sigma0(w9))));
             t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
             System.out.println("After round 41");
             System.out.println("t1 = " + t1);
@@ -1237,7 +1238,7 @@ public class VectorSHA256 {
             dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
-            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0xa81a664b), inc(w9, sigma1(w7), w2, sigma0(w10))));
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0xa81a664b), w9 = inc(w9, sigma1(w7), w2, sigma0(w10))));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
             System.out.println("After round 42");
             System.out.println("t1 = " + t1);
@@ -1245,7 +1246,7 @@ public class VectorSHA256 {
             cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
-            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0xc24b8b70), inc(w10, sigma1(w8), w3, sigma0(w11))));
+            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0xc24b8b70), w10 = inc(w10, sigma1(w8), w3, sigma0(w11))));
             t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
             System.out.println("After round 43");
             System.out.println("t1 = " + t1);
@@ -1253,7 +1254,7 @@ public class VectorSHA256 {
             bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
-            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0xc76c51a3), inc(w11, sigma1(w9), w4, sigma0(w12))));
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0xc76c51a3), w11 = inc(w11, sigma1(w9), w4, sigma0(w12))));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
             System.out.println("After round 44");
             System.out.println("t1 = " + t1);
@@ -1261,7 +1262,7 @@ public class VectorSHA256 {
             aVec = add(aVec, t1);
             eVec = add(t1, t2);
 
-            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0xd192e819), inc(w12, sigma1(w10), w5, sigma0(w13))));
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0xd192e819), w12 = inc(w12, sigma1(w10), w5, sigma0(w13))));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
             System.out.println("After round 45");
             System.out.println("t1 = " + t1);
@@ -1269,7 +1270,7 @@ public class VectorSHA256 {
             hVec = add(hVec, t1);
             dVec = add(t1, t2);
 
-            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0xd6990624), inc(w13, sigma1(w11), w6, sigma0(w14))));
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0xd6990624), w13 = inc(w13, sigma1(w11), w6, sigma0(w14))));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
             System.out.println("After round 46");
             System.out.println("t1 = " + t1);
@@ -1277,7 +1278,7 @@ public class VectorSHA256 {
             gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
-            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0xf40e3585), inc(w14, sigma1(w12), w7, sigma0(w15))));
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0xf40e3585), w14 = inc(w14, sigma1(w12), w7, sigma0(w15))));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
             System.out.println("After round 47");
             System.out.println("t1 = " + t1);
@@ -1285,7 +1286,7 @@ public class VectorSHA256 {
             fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
-            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x106aa070), inc(w15, sigma1(w13), w8, sigma0(w0))));
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x106aa070), w15 = inc(w15, sigma1(w13), w8, sigma0(w0))));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
             System.out.println("After round 48");
             System.out.println("t1 = " + t1);
@@ -1293,7 +1294,7 @@ public class VectorSHA256 {
             eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
-            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x19a4c116), inc(w0, sigma1(w14), w9, sigma0(w1))));
+            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x19a4c116), w0 = inc(w0, sigma1(w14), w9, sigma0(w1))));
             t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
             System.out.println("After round 49");
             System.out.println("t1 = " + t1);
@@ -1301,7 +1302,7 @@ public class VectorSHA256 {
             dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
-            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x1e376c08), inc(w1, sigma1(w15), w10, sigma0(w2))));
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x1e376c08), w1 = inc(w1, sigma1(w15), w10, sigma0(w2))));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
             System.out.println("After round 50");
             System.out.println("t1 = " + t1);
@@ -1309,7 +1310,7 @@ public class VectorSHA256 {
             cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
-            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x2748774c), inc(w2, sigma1(w0), w11, sigma0(w3))));
+            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x2748774c), w2 = inc(w2, sigma1(w0), w11, sigma0(w3))));
             t2  = add(Sigma0(gVec), maj(gVec, hVec, aVec));
             System.out.println("After round 51");
             System.out.println("t1 = " + t1);
@@ -1317,7 +1318,7 @@ public class VectorSHA256 {
             bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
-            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x34b0bcb5), inc(w3, sigma1(w1), w12, sigma0(w4))));
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x34b0bcb5), w3 = inc(w3, sigma1(w1), w12, sigma0(w4))));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
             System.out.println("After round 52");
             System.out.println("t1 = " + t1);
@@ -1325,7 +1326,7 @@ public class VectorSHA256 {
             aVec = add(aVec, t1);
             eVec = add(t1, t2);
 
-            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x391c0cb3), inc(w4, sigma1(w2), w13, sigma0(w5))));
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x391c0cb3), w4 = inc(w4, sigma1(w2), w13, sigma0(w5))));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
             System.out.println("After round 53");
             System.out.println("t1 = " + t1);
@@ -1333,7 +1334,7 @@ public class VectorSHA256 {
             hVec = add(hVec, t1);
             dVec = add(t1, t2);
 
-            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x4ed8aa4a), inc(w5, sigma1(w3), w14, sigma0(w6))));
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x4ed8aa4a), w5 = inc(w5, sigma1(w3), w14, sigma0(w6))));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
             System.out.println("After round 54");
             System.out.println("t1 = " + t1);
@@ -1341,7 +1342,7 @@ public class VectorSHA256 {
             gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
-            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x5b9cca4f), inc(w6, sigma1(w4), w15, sigma0(w7))));
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0x5b9cca4f), w6 = inc(w6, sigma1(w4), w15, sigma0(w7))));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
             System.out.println("After round 55");
             System.out.println("t1 = " + t1);
@@ -1349,7 +1350,7 @@ public class VectorSHA256 {
             fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
-            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x682e6ff3), inc(w7, sigma1(w5), w0, sigma0(w8))));
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0x682e6ff3), w7 = inc(w7, sigma1(w5), w0, sigma0(w8))));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
             System.out.println("After round 56");
             System.out.println("t1 = " + t1);
@@ -1357,7 +1358,7 @@ public class VectorSHA256 {
             eVec = add(eVec, t1);
             aVec = add(t1, t2);
 
-            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x748f82ee), inc(w8, sigma1(w6), w1, sigma0(w9))));
+            t1 = add(hVec, Sigma1(eVec), ch(eVec, fVec, gVec), add(IntVector.broadcast(species, 0x748f82ee), w8 = inc(w8, sigma1(w6), w1, sigma0(w9))));
             t2 = add(Sigma0(aVec), maj(aVec, bVec, cVec));
             System.out.println("After round 57");
             System.out.println("t1 = " + t1);
@@ -1365,7 +1366,7 @@ public class VectorSHA256 {
             dVec = add(dVec, t1);
             hVec = add(t1, t2);
 
-            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x78a5636f), inc(w9, sigma1(w7), w2, sigma0(w10))));
+            t1 = add(gVec, Sigma1(dVec), ch(dVec, eVec, fVec), add(IntVector.broadcast(species, 0x78a5636f), w9 = inc(w9, sigma1(w7), w2, sigma0(w10))));
             t2 = add(Sigma0(hVec), maj(hVec, aVec, bVec));
             System.out.println("After round 58");
             System.out.println("t1 = " + t1);
@@ -1373,7 +1374,7 @@ public class VectorSHA256 {
             cVec = add(cVec, t1);
             gVec = add(t1, t2);
 
-            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x84c87814), inc(w10, sigma1(w8), w3, sigma0(w11))));
+            t1 = add(fVec, Sigma1(cVec), ch(cVec, dVec, eVec), add(IntVector.broadcast(species, 0x84c87814), w10 = inc(w10, sigma1(w8), w3, sigma0(w11))));
             t2 = add(Sigma0(gVec), maj(gVec, hVec, aVec));
             System.out.println("After round 59");
             System.out.println("t1 = " + t1);
@@ -1381,7 +1382,7 @@ public class VectorSHA256 {
             bVec = add(bVec, t1);
             fVec = add(t1, t2);
 
-            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x8cc70208), inc(w11, sigma1(w9), w4, sigma0(w12))));
+            t1 = add(eVec, Sigma1(bVec), ch(bVec, cVec, dVec), add(IntVector.broadcast(species, 0x8cc70208), w11 = inc(w11, sigma1(w9), w4, sigma0(w12))));
             t2 = add(Sigma0(fVec), maj(fVec, gVec, hVec));
             System.out.println("After round 60");
             System.out.println("t1 = " + t1);
@@ -1389,7 +1390,7 @@ public class VectorSHA256 {
             aVec = add(aVec, t1);
             eVec = add(t1, t2);
 
-            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x90befffa), inc(w12, sigma1(w10), w5, sigma0(w13))));
+            t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x90befffa), w12 = inc(w12, sigma1(w10), w5, sigma0(w13))));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
             System.out.println("After round 61");
             System.out.println("t1 = " + t1);
@@ -1397,7 +1398,7 @@ public class VectorSHA256 {
             hVec = add(hVec, t1);
             dVec = add(t1, t2);
 
-            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0xa4506ceb), inc(w13, sigma1(w11), w6, sigma0(w14))));
+            t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0xa4506ceb), w13 = inc(w13, sigma1(w11), w6, sigma0(w14))));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
             System.out.println("After round 62");
             System.out.println("t1 = " + t1);
@@ -1405,7 +1406,7 @@ public class VectorSHA256 {
             gVec = add(gVec, t1);
             cVec = add(t1, t2);
 
-            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0xbef9a3f7), inc(w14, sigma1(w12), w7, sigma0(w15))));
+            t1 = add(bVec, Sigma1(gVec), ch(gVec, hVec, aVec), add(IntVector.broadcast(species, 0xbef9a3f7), w14 = inc(w14, sigma1(w12), w7, sigma0(w15))));
             t2 = add(Sigma0(cVec), maj(cVec, dVec, eVec));
             System.out.println("After round 63");
             System.out.println("t1 = " + t1);
@@ -1413,7 +1414,7 @@ public class VectorSHA256 {
             fVec = add(fVec, t1);
             bVec = add(t1, t2);
 
-            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0xc67178f2), inc(w15, sigma1(w13), w8, sigma0(w0))));
+            t1 = add(aVec, Sigma1(fVec), ch(fVec, gVec, hVec), add(IntVector.broadcast(species, 0xc67178f2), w15 = inc(w15, sigma1(w13), w8, sigma0(w0))));
             t2 = add(Sigma0(bVec), maj(bVec, cVec, dVec));
             System.out.println("After round 64");
             System.out.println("t1 = " + t1);
@@ -1430,6 +1431,7 @@ public class VectorSHA256 {
             gVec = add(gVec, IntVector.broadcast(species, H[6]));
             hVec = add(hVec, IntVector.broadcast(species, H[7]));
 
+            // We are good to here, final a,b,c,d,e,f,g,h vectors match.
             System.out.println("a: " + Arrays.toString(aVec.toArray()));
             System.out.println("b: " + Arrays.toString(bVec.toArray()));
             System.out.println("c: " + Arrays.toString(cVec.toArray()));
@@ -1438,10 +1440,35 @@ public class VectorSHA256 {
             System.out.println("f: " + Arrays.toString(fVec.toArray()));
             System.out.println("g: " + Arrays.toString(gVec.toArray()));
             System.out.println("h: " + Arrays.toString(hVec.toArray()));
+
+            /*
+            Put we are not doing this step:
+                __m256i t0 = a, t1 = b, t2 = c, t3 = d, t4 = e, t5 = f, t6 = g, t7 = h;
+                w0 = Add(t0, a);
+                w1 = Add(t1, b);
+                w2 = Add(t2, c);
+                w3 = Add(t3, d);
+                w4 = Add(t4, e);
+                w5 = Add(t5, f);
+                w6 = Add(t6, g);
+                w7 = Add(t7, h);
+             */
             byte[] hashes;
             if (species.vectorBitSize() == 256) {
                 hashes = new byte[32 * 8];
+
+                // Writes 18b6c3d7 into first position (8 chars = 1 byte)
                 write8(hashes, 0, add(aVec, IntVector.broadcast(species, H[0])));
+                // for some reason this is writing CEE80289 instead of cee8289 - so we don't match bitcoin - but that's only 7 bits on bitcoin so...? There is no trailing 0 because next write is: 18b6c3d7cee8289f29cfa73
+                // 18b6c3d7
+                // cee8289
+                // f29cfa73
+
+                // It seems like what's happening is we get the value 8902e8ce, which is in big endian. Then we write these 32 bits in little endian which is:
+                // CEE8 0289
+                // It seems like Java writes the 0, but bitcoin strips it...which makes us end up with the difference...
+
+                // -1996298034 should be cee8289 to match bitcoin
                 write8(hashes, 4, add(bVec, IntVector.broadcast(species, H[1])));
                 write8(hashes, 8, add(cVec, IntVector.broadcast(species, H[2])));
                 write8(hashes, 12, add(dVec, IntVector.broadcast(species, H[3])));
@@ -1467,6 +1494,7 @@ public class VectorSHA256 {
             <MacGyver> The result after those 8 calls to Write8 is 8 hashes back-to-back in out.
              */
             // FIXME: Instead of writing to hashes we can just set H from the bytes the last hash (H[7])
+            System.out.println("hashes: " + bytesToHex(hashes));
             H[0] = bytesToIntLE(hashes, 224);
             H[1] = bytesToIntLE(hashes, 228);
             H[2] = bytesToIntLE(hashes, 232);
