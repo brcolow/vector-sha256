@@ -16,17 +16,18 @@ import java.util.Arrays;
 import java.util.function.BiFunction;
 
 /**
+ * This is a multi-way SHA-256 implementation using the Java Vector API.
+ * <p>
+ * Note that this does *not* compute multiple blocks of a single hash in parallel but instead computes multiple hashes
+ * in parallel! The former is not possible as the values of block i+1 depend on block i.
+ * <p>
+ * Based on the double SHA-256 implementation found in bitcoin:
+ * <p>
  * https://github.com/bitcoin/bitcoin/blob/7fcf53f7b4524572d1d0c9a5fdc388e87eb02416/src/crypto/sha256.h
  * https://github.com/bitcoin/bitcoin/blob/7fcf53f7b4524572d1d0c9a5fdc388e87eb02416/src/crypto/sha256.cpp
  * https://github.com/bitcoin/bitcoin/blob/7fcf53f7b4524572d1d0c9a5fdc388e87eb02416/src/crypto/sha256_avx2.cpp
- * https://github.com/bcgit/bc-java/blob/bc3b92f1f0e78b82e2584c5fb4b226a13e7f8b3b/core/src/main/java/org/bouncycastle/crypto/digests/SHA256Digest.java
- * https://github.com/bcgit/bc-java/blob/bc3b92f1f0e78b82e2584c5fb4b226a13e7f8b3b/core/src/main/java/org/bouncycastle/crypto/digests/GeneralDigest.java
- * https://github.com/openjdk/jdk/blob/739769c8fc4b496f08a92225a12d07414537b6c0/src/java.base/share/classes/sun/security/provider/SHA2.java#L250
- *
- * Non double implementation:
- * https://github.com/patrykwnosuch/cpuminer-nosuch/blob/f5d602ea58b12352bdd341df06422c21b4ad7cd2/algo/sha/sha2-hash-4way.c#L440
- *
- * Intel paper about multi-buffer SHA2:
+ * <p>
+ * Intel papers about multi-buffer SHA2:
  * https://www.intel.com/content/dam/www/public/us/en/documents/white-papers/sha-256-implementations-paper.pdf
  * https://www.intel.com/content/dam/www/public/us/en/documents/white-papers/communications-ia-multi-buffer-paper.pdf
  */
@@ -205,33 +206,6 @@ public class VectorSHA256 {
                     transform_multi_way(in, SPECIES_256, this::read8);
                     byte[] hash = new byte[digestLength];
                     intArrToBytesBE(H, hash, digestLength);
-                    System.out.println("After 8way transform (compress): ");
-                    System.out.println("H[0] = " + bytesToHex(intToBytesBE(H[0])));
-                    System.out.println("H[1] = " + bytesToHex(intToBytesBE(H[1])));
-                    System.out.println("H[2] = " + bytesToHex(intToBytesBE(H[2])));
-                    System.out.println("H[3] = " + bytesToHex(intToBytesBE(H[3])));
-                    System.out.println("H[4] = " + bytesToHex(intToBytesBE(H[4])));
-                    System.out.println("H[5] = " + bytesToHex(intToBytesBE(H[5])));
-                    System.out.println("H[6] = " + bytesToHex(intToBytesBE(H[6])));
-                    System.out.println("H[7] = " + bytesToHex(intToBytesBE(H[7])));
-                    System.out.println("H[0] = " + H[0]);
-                    System.out.println("H[1] = " + H[1]);
-                    System.out.println("H[2] = " + H[2]);
-                    System.out.println("H[3] = " + H[3]);
-                    System.out.println("H[4] = " + H[4]);
-                    System.out.println("H[5] = " + H[5]);
-                    System.out.println("H[6] = " + H[6]);
-                    System.out.println("H[7] = " + H[7]);
-                    System.out.println("To match JDK impl after 8 rounds should be:");
-                    System.out.println("H[0] = 993071969\n" +
-                            "H[1] = 713321891\n" +
-                            "H[2] = 668883598\n" +
-                            "H[3] = 323462243\n" +
-                            "H[4] = -1670923311\n" +
-                            "H[5] = 1992375618\n" +
-                            "H[6] = 1610520989\n" +
-                            "H[7] = 103409777");
-                    System.out.println("H[] after 8way transform: " + bytesToHex(hash));
                 }
                 len = limit - inOff;
                 System.out.println("len is now: " + len);
@@ -243,7 +217,6 @@ public class VectorSHA256 {
                     transform_multi_way(in, SPECIES_128, this::read4);
                     byte[] hash = new byte[digestLength];
                     intArrToBytesBE(H, hash, digestLength);
-                    System.out.println("H[] after 4way transform: " + bytesToHex(hash));
                 }
                 len = limit - inOff;
             }
@@ -254,7 +227,6 @@ public class VectorSHA256 {
                     transform_multi_way(in, SPECIES_64, this::read2);
                     byte[] hash = new byte[digestLength];
                     intArrToBytesBE(H, hash, digestLength);
-                    System.out.println("H[] after 2way transform: " + bytesToHex(hash));
                 }
                 len = limit - inOff;
             }
