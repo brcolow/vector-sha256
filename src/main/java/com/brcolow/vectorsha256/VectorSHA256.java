@@ -72,9 +72,9 @@ public class VectorSHA256 {
     }
 
     public static class Sha256Digest {
-        private int[] H;
+        private final int[] H;
         // buffer to store partial blocks, up to 64 bytes large
-        private byte[] buffer;
+        private final byte[] buffer;
         // offset into buffer
         private int bufOfs;
         // size of the input to the compression function (transform) in bytes
@@ -89,7 +89,6 @@ public class VectorSHA256 {
 
         static {
             padding = new byte[64];
-            // I believe this adds the 1-bit to the padding.
             padding[0] = (byte)0x80;
         }
 
@@ -130,16 +129,11 @@ public class VectorSHA256 {
             }
             long bitsProcessed = bytesProcessed << 3;
             int index = (int) bytesProcessed & 0x3f;
-            System.out.println("bytesProcessed: " + bytesProcessed);
-            System.out.println("bitsProcessed: " + bitsProcessed);
             int padLen = (index < 56) ? (56 - index) : (120 - index);
-            System.out.println("padding length: " + padLen);
             update(padding, 0, padLen);
 
             BE.INT_ARRAY.set(buffer, 56, (int) (bitsProcessed >>> 32));
-            System.out.println("Setting buffer[56-60] = " + ((int) (bitsProcessed >>> 32)));
             BE.INT_ARRAY.set(buffer, 60, (int) bitsProcessed);
-            System.out.println("Setting buffer[60-64] = " + (int) bitsProcessed);
             transform(buffer);
             byte[] hash = new byte[digestLength];
             intArrToBytesBE(H, hash, digestLength);
@@ -177,10 +171,6 @@ public class VectorSHA256 {
         }
 
         public void update(byte[] in, int inOff, int len) {
-            System.out.println("update\n");
-            System.out.println("in: " + bytesToHex(in));
-            System.out.println("inOff: " + inOff);
-            System.out.println("len: " + len);
             if (len == 0) {
                 return;
             }
@@ -211,9 +201,7 @@ public class VectorSHA256 {
             if (len >= blockSize8x) {
                 System.out.println("len >= blockSize8x");
                 int limit = inOff + len;
-                System.out.println("limit: " + limit);
                 for (; inOff < limit; inOff += blockSize8x) {
-                    System.out.println("inOff: " + inOff);
                     transform_multi_way(in, SPECIES_256, this::read8);
                     byte[] hash = new byte[digestLength];
                     intArrToBytesBE(H, hash, digestLength);
@@ -461,7 +449,6 @@ public class VectorSHA256 {
             ByteVector shuffled = v.reinterpretAsBytes().rearrange(shuffle, shuffle.laneIsValid());
             IntVector shuffledInt = IntVector.fromByteArray(SPECIES_256, shuffled.toArray(), 0, ByteOrder.BIG_ENDIAN);
             System.out.println("shuffledInt: " + shuffledInt);
-            System.out.println("Writing byte in first open position: " + bytesToHex(intToBytesLE(shuffledInt.lane(0))));
             System.out.println("Writing byte in last open position: " + bytesToHex(intToBytesLE(shuffledInt.lane(7))));
             System.arraycopy(intToBytesLE(shuffledInt.lane(0)), 0, out, 0 + offset, 4);
             System.arraycopy(intToBytesLE(shuffledInt.lane(1)), 0, out, 32 + offset, 4);
@@ -849,14 +836,6 @@ public class VectorSHA256 {
             System.out.println("H[5] = " + bytesToHex(intToBytesBE(H[5])));
             System.out.println("H[6] = " + bytesToHex(intToBytesBE(H[6])));
             System.out.println("H[7] = " + bytesToHex(intToBytesBE(H[7])));
-            System.out.println("H[0] = " + H[0]);
-            System.out.println("H[1] = " + H[1]);
-            System.out.println("H[2] = " + H[2]);
-            System.out.println("H[3] = " + H[3]);
-            System.out.println("H[4] = " + H[4]);
-            System.out.println("H[5] = " + H[5]);
-            System.out.println("H[6] = " + H[6]);
-            System.out.println("H[7] = " + H[7]);
         }
 
         /**
@@ -1459,15 +1438,14 @@ public class VectorSHA256 {
             <MacGyver> The result after those 8 calls to Write8 is 8 hashes back-to-back in out.
              */
             // FIXME: Instead of writing to hashes we can just set H from the bytes the last hash (H[7])
-            System.out.println("hashes: " + bytesToHex(hashes));
-            H[0] = bytesToIntBE(hashes, 224);
-            H[1] = bytesToIntBE(hashes, 228);
-            H[2] = bytesToIntBE(hashes, 232);
-            H[3] = bytesToIntBE(hashes, 236);
-            H[4] = bytesToIntBE(hashes, 240);
-            H[5] = bytesToIntBE(hashes, 244);
-            H[6] = bytesToIntBE(hashes, 248);
-            H[7] = bytesToIntBE(hashes, 252);
+            H[0] = bytesToIntLE(hashes, 224);
+            H[1] = bytesToIntLE(hashes, 228);
+            H[2] = bytesToIntLE(hashes, 232);
+            H[3] = bytesToIntLE(hashes, 236);
+            H[4] = bytesToIntLE(hashes, 240);
+            H[5] = bytesToIntLE(hashes, 244);
+            H[6] = bytesToIntLE(hashes, 248);
+            H[7] = bytesToIntLE(hashes, 252);
         }
     }
 

@@ -227,6 +227,9 @@ abstract class SHA2 extends DigestBase {
             c = b;
             b = a;
             a = T1 + T2;
+            System.out.println("After round " + i);
+            System.out.println("t1 = " + T1);
+            System.out.println("t2 = " + T2);
         }
 
         H[0] += a;
@@ -261,20 +264,6 @@ abstract class SHA2 extends DigestBase {
         copy.H = copy.H.clone();
         copy.W = null;
         return copy;
-    }
-
-    /**
-     * SHA-224 implementation class.
-     */
-    public static final class SHA224 extends SHA2 {
-        private static final int[] INITIAL_HASHES = {
-                0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939,
-                0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4
-        };
-
-        public SHA224() {
-            super("SHA-224", 28, INITIAL_HASHES);
-        }
     }
 
     /**
