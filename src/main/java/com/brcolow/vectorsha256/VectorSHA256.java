@@ -52,15 +52,12 @@ public class VectorSHA256 {
         }
         System.out.println("JDK hash: " + bytesToHex(jdkHash));
         System.out.println("JDK copy hash: " + bytesToHex(jdkCopyHash));
-        //System.out.println("data.length: " + data.length);
         byte[] out = new byte[32];
         Sha256Digest sha256Digest = new Sha256Digest();
-        // sha256Digest.transform_8way("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy".getBytes(StandardCharsets.UTF_8), out);
 
         sha256Digest.update(toHash, 0, toHash.length);
         sha256Digest.digest(out, 0, 32);
         System.out.println("hash out: " + bytesToHex(out));
-        //sha256Digest.transform_8way(data, out);
     }
 
     private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
@@ -135,13 +132,11 @@ public class VectorSHA256 {
             int index = (int) bytesProcessed & 0x3f;
             System.out.println("bytesProcessed: " + bytesProcessed);
             System.out.println("bitsProcessed: " + bitsProcessed);
-            System.out.println("index: " + index);
             int padLen = (index < 56) ? (56 - index) : (120 - index);
             System.out.println("padding length: " + padLen);
             update(padding, 0, padLen);
 
             BE.INT_ARRAY.set(buffer, 56, (int) (bitsProcessed >>> 32));
-            System.out.println("shift = " + (4096L >>> 32));
             System.out.println("Setting buffer[56-60] = " + ((int) (bitsProcessed >>> 32)));
             BE.INT_ARRAY.set(buffer, 60, (int) bitsProcessed);
             System.out.println("Setting buffer[60-64] = " + (int) bitsProcessed);
@@ -223,6 +218,14 @@ public class VectorSHA256 {
                     byte[] hash = new byte[digestLength];
                     intArrToBytesBE(H, hash, digestLength);
                     System.out.println("After 8way transform (compress): ");
+                    System.out.println("H[0] = " + bytesToHex(intToBytesBE(H[0])));
+                    System.out.println("H[1] = " + bytesToHex(intToBytesBE(H[1])));
+                    System.out.println("H[2] = " + bytesToHex(intToBytesBE(H[2])));
+                    System.out.println("H[3] = " + bytesToHex(intToBytesBE(H[3])));
+                    System.out.println("H[4] = " + bytesToHex(intToBytesBE(H[4])));
+                    System.out.println("H[5] = " + bytesToHex(intToBytesBE(H[5])));
+                    System.out.println("H[6] = " + bytesToHex(intToBytesBE(H[6])));
+                    System.out.println("H[7] = " + bytesToHex(intToBytesBE(H[7])));
                     System.out.println("H[0] = " + H[0]);
                     System.out.println("H[1] = " + H[1]);
                     System.out.println("H[2] = " + H[2]);
@@ -383,7 +386,7 @@ public class VectorSHA256 {
             return out;
         }
 
-        byte[] intToBytesBE(int value) {
+        public static byte[] intToBytesBE(int value) {
             byte[] out = new byte[4];
             BE.INT_ARRAY.set(out, 0, value);
             return out;
@@ -404,7 +407,6 @@ public class VectorSHA256 {
                     bytesToIntLE(chunk, 128 + offset),
                     bytesToIntLE(chunk, 192 + offset)
             }, 0);
-            // VectorShuffle<Byte> HIGHTOLOW =  VectorShuffle.fromOp(SPECIES, (i -> ((8+i)%16)));
             var shuffle = VectorShuffle.fromArray(SPECIES_128, new int[]{
                     12,13,14,15,   8, 9,10,11,
                     4, 5, 6, 7,    0, 1, 2, 3
@@ -459,8 +461,8 @@ public class VectorSHA256 {
             ByteVector shuffled = v.reinterpretAsBytes().rearrange(shuffle, shuffle.laneIsValid());
             IntVector shuffledInt = IntVector.fromByteArray(SPECIES_256, shuffled.toArray(), 0, ByteOrder.BIG_ENDIAN);
             System.out.println("shuffledInt: " + shuffledInt);
-            System.out.println("lane 0:" + shuffledInt.lane(0));
             System.out.println("Writing byte in first open position: " + bytesToHex(intToBytesLE(shuffledInt.lane(0))));
+            System.out.println("Writing byte in last open position: " + bytesToHex(intToBytesLE(shuffledInt.lane(7))));
             System.arraycopy(intToBytesLE(shuffledInt.lane(0)), 0, out, 0 + offset, 4);
             System.arraycopy(intToBytesLE(shuffledInt.lane(1)), 0, out, 32 + offset, 4);
             System.arraycopy(intToBytesLE(shuffledInt.lane(2)), 0, out, 64 + offset, 4);
@@ -839,6 +841,14 @@ public class VectorSHA256 {
             H[5] += f;
             H[6] += g;
             H[7] += h;
+            System.out.println("H[0] = " + bytesToHex(intToBytesBE(H[0])));
+            System.out.println("H[1] = " + bytesToHex(intToBytesBE(H[1])));
+            System.out.println("H[2] = " + bytesToHex(intToBytesBE(H[2])));
+            System.out.println("H[3] = " + bytesToHex(intToBytesBE(H[3])));
+            System.out.println("H[4] = " + bytesToHex(intToBytesBE(H[4])));
+            System.out.println("H[5] = " + bytesToHex(intToBytesBE(H[5])));
+            System.out.println("H[6] = " + bytesToHex(intToBytesBE(H[6])));
+            System.out.println("H[7] = " + bytesToHex(intToBytesBE(H[7])));
             System.out.println("H[0] = " + H[0]);
             System.out.println("H[1] = " + H[1]);
             System.out.println("H[2] = " + H[2]);
@@ -1049,19 +1059,6 @@ public class VectorSHA256 {
             aVec = add(aVec, t1);
             eVec = add(t1, t2);
 
-            System.out.println("a: " + aVec);
-            System.out.println("b: " + bVec);
-            System.out.println("c: " + cVec);
-            System.out.println("d: " + dVec);
-            // e is wrong!
-            System.out.println("e: " + eVec);
-            System.out.println("f: " + fVec);
-            System.out.println("g: " + gVec);
-            System.out.println("h: " + hVec);
-            System.out.println("w4: " + w4);
-            System.out.println("w2: " + w2);
-            System.out.println("w13: " + w13);
-            System.out.println("w5: " + w5);
             t1 = add(dVec, Sigma1(aVec), ch(aVec, bVec, cVec), add(IntVector.broadcast(species, 0x2de92c6f), w4 = inc(w4, sigma1(w2), w13, sigma0(w5))));
             t2 = add(Sigma0(eVec), maj(eVec, fVec, gVec));
             System.out.println("After round 20");
@@ -1069,14 +1066,6 @@ public class VectorSHA256 {
             System.out.println("t2 = " + t2);
             hVec = add(hVec, t1);
             dVec = add(t1, t2);
-            System.out.println("a: " + aVec);
-            System.out.println("b: " + bVec);
-            System.out.println("c: " + cVec);
-            System.out.println("d: " + dVec);
-            System.out.println("e: " + eVec);
-            System.out.println("f: " + fVec);
-            System.out.println("g: " + gVec);
-            System.out.println("h: " + hVec);
 
             t1 = add(cVec, Sigma1(hVec), ch(hVec, aVec, bVec), add(IntVector.broadcast(species, 0x4a7484aa), w5 = inc(w5, sigma1(w3), w14, sigma0(w6))));
             t2 = add(Sigma0(dVec), maj(dVec, eVec, fVec));
@@ -1441,51 +1430,27 @@ public class VectorSHA256 {
             System.out.println("g: " + Arrays.toString(gVec.toArray()));
             System.out.println("h: " + Arrays.toString(hVec.toArray()));
 
-            /*
-            Put we are not doing this step:
-                __m256i t0 = a, t1 = b, t2 = c, t3 = d, t4 = e, t5 = f, t6 = g, t7 = h;
-                w0 = Add(t0, a);
-                w1 = Add(t1, b);
-                w2 = Add(t2, c);
-                w3 = Add(t3, d);
-                w4 = Add(t4, e);
-                w5 = Add(t5, f);
-                w6 = Add(t6, g);
-                w7 = Add(t7, h);
-             */
             byte[] hashes;
             if (species.vectorBitSize() == 256) {
                 hashes = new byte[32 * 8];
-
-                // Writes 18b6c3d7 into first position (8 chars = 1 byte)
-                write8(hashes, 0, add(aVec, IntVector.broadcast(species, H[0])));
-                // for some reason this is writing CEE80289 instead of cee8289 - so we don't match bitcoin - but that's only 7 bits on bitcoin so...? There is no trailing 0 because next write is: 18b6c3d7cee8289f29cfa73
-                // 18b6c3d7
-                // cee8289
-                // f29cfa73
-
-                // It seems like what's happening is we get the value 8902e8ce, which is in big endian. Then we write these 32 bits in little endian which is:
-                // CEE8 0289
-                // It seems like Java writes the 0, but bitcoin strips it...which makes us end up with the difference...
-
-                // -1996298034 should be cee8289 to match bitcoin
-                write8(hashes, 4, add(bVec, IntVector.broadcast(species, H[1])));
-                write8(hashes, 8, add(cVec, IntVector.broadcast(species, H[2])));
-                write8(hashes, 12, add(dVec, IntVector.broadcast(species, H[3])));
-                write8(hashes, 16, add(eVec, IntVector.broadcast(species, H[4])));
-                write8(hashes, 20, add(fVec, IntVector.broadcast(species, H[5])));
-                write8(hashes, 24, add(gVec, IntVector.broadcast(species, H[6])));
-                write8(hashes, 28, add(hVec, IntVector.broadcast(species, H[7])));
+                write8(hashes, 0, aVec);
+                write8(hashes, 4, bVec);
+                write8(hashes, 8, cVec);
+                write8(hashes, 12, dVec);
+                write8(hashes, 16, eVec);
+                write8(hashes, 20, fVec);
+                write8(hashes, 24, gVec);
+                write8(hashes, 28, hVec);
             } else if (species.vectorBitSize() == 128) {
                 hashes = new byte[32 * 4];
-                write4(hashes, 0, add(aVec, IntVector.broadcast(species, H[0])));
-                write4(hashes, 4, add(bVec, IntVector.broadcast(species, H[1])));
-                write4(hashes, 8, add(cVec, IntVector.broadcast(species, H[2])));
-                write4(hashes, 12, add(dVec, IntVector.broadcast(species, H[3])));
-                write4(hashes, 16, add(eVec, IntVector.broadcast(species, H[4])));
-                write4(hashes, 20, add(fVec, IntVector.broadcast(species, H[5])));
-                write4(hashes, 24, add(gVec, IntVector.broadcast(species, H[6])));
-                write4(hashes, 28, add(hVec, IntVector.broadcast(species, H[7])));
+                write4(hashes, 0, aVec);
+                write4(hashes, 4, bVec);
+                write4(hashes, 8, cVec);
+                write4(hashes, 12, dVec);
+                write4(hashes, 16, eVec);
+                write4(hashes, 20, fVec);
+                write4(hashes, 24, gVec);
+                write4(hashes, 28, hVec);
             } else {
                 throw new RuntimeException("not implemented");
             }
@@ -1495,14 +1460,14 @@ public class VectorSHA256 {
              */
             // FIXME: Instead of writing to hashes we can just set H from the bytes the last hash (H[7])
             System.out.println("hashes: " + bytesToHex(hashes));
-            H[0] = bytesToIntLE(hashes, 224);
-            H[1] = bytesToIntLE(hashes, 228);
-            H[2] = bytesToIntLE(hashes, 232);
-            H[3] = bytesToIntLE(hashes, 236);
-            H[4] = bytesToIntLE(hashes, 240);
-            H[5] = bytesToIntLE(hashes, 244);
-            H[6] = bytesToIntLE(hashes, 248);
-            H[7] = bytesToIntLE(hashes, 252);
+            H[0] = bytesToIntBE(hashes, 224);
+            H[1] = bytesToIntBE(hashes, 228);
+            H[2] = bytesToIntBE(hashes, 232);
+            H[3] = bytesToIntBE(hashes, 236);
+            H[4] = bytesToIntBE(hashes, 240);
+            H[5] = bytesToIntBE(hashes, 244);
+            H[6] = bytesToIntBE(hashes, 248);
+            H[7] = bytesToIntBE(hashes, 252);
         }
     }
 

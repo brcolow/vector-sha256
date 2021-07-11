@@ -30,6 +30,7 @@ import java.util.Objects;
 import static com.brcolow.vectorsha256.ByteArrayAccess.b2iBig64;
 import static com.brcolow.vectorsha256.ByteArrayAccess.i2bBig;
 import static com.brcolow.vectorsha256.ByteArrayAccess.i2bBig4;
+import static com.brcolow.vectorsha256.VectorSHA256.Sha256Digest.intToBytesBE;
 import static com.brcolow.vectorsha256.VectorSHA256.bytesToHex;
 
 /**
@@ -236,6 +237,15 @@ abstract class SHA2 extends DigestBase {
         H[5] += f;
         H[6] += g;
         H[7] += h;
+        System.out.println("JDK compress final:");
+        System.out.println("H[0] = " + bytesToHex(intToBytesBE(H[0])));
+        System.out.println("H[1] = " + bytesToHex(intToBytesBE(H[1])));
+        System.out.println("H[2] = " + bytesToHex(intToBytesBE(H[2])));
+        System.out.println("H[3] = " + bytesToHex(intToBytesBE(H[3])));
+        System.out.println("H[4] = " + bytesToHex(intToBytesBE(H[4])));
+        System.out.println("H[5] = " + bytesToHex(intToBytesBE(H[5])));
+        System.out.println("H[6] = " + bytesToHex(intToBytesBE(H[6])));
+        System.out.println("H[7] = " + bytesToHex(intToBytesBE(H[7])));
         System.out.println("H[0] = " + H[0]);
         System.out.println("H[1] = " + H[1]);
         System.out.println("H[2] = " + H[2]);
